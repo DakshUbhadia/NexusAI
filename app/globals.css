@@ -54,18 +54,18 @@
   --text-muted: #585878;
   --text-inverted: #07070E;
 
-  --accent-primary: #7C6DFA;
-  --accent-primary-hover: #9283FB;
-  --accent-primary-muted: rgba(124,109,250,0.15);
+  --accent-primary: #06B6D4;
+  --accent-primary-hover: #22D3EE;
+  --accent-primary-muted: rgba(6,182,212,0.15);
   --accent-secondary: #22D3EE;
   --accent-secondary-muted: rgba(34,211,238,0.12);
-  --accent-glow: rgba(124,109,250,0.35);
+  --accent-glow: rgba(6,182,212,0.35);
   --accent-glow-cyan: rgba(34,211,238,0.25);
 
   --border-default: #1E1E38;
   --border-subtle: #16162A;
   --border-strong: #2E2E50;
-  --border-accent: rgba(124,109,250,0.50);
+  --border-accent: rgba(6,182,212,0.50);
 
   --state-error: #F87171;
   --state-error-muted: rgba(248,113,113,0.12);
@@ -75,8 +75,8 @@
   --state-warning-muted: rgba(251,191,36,0.12);
   --state-info: var(--accent-secondary);
 
-  --ai-generating-glow: rgba(124,109,250,0.45);
-  --ai-node-streaming: rgba(124,109,250,0.08);
+  --ai-generating-glow: rgba(6,182,212,0.45);
+  --ai-node-streaming: rgba(6,182,212,0.08);
   --ai-node-done: var(--accent-primary-muted);
 
   --presence-1: #F472B6;
