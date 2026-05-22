@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import { ClerkProvider } from "@clerk/nextjs"
+import { ui } from "@clerk/ui"
 
 import "./globals.css"
 
@@ -14,8 +16,10 @@ export default function RootLayout({
   children: ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body suppressHydrationWarning>{children}</body>
-    </html>
+    <ClerkProvider ui={ui}>
+      <html lang="en" className="dark">
+        <body suppressHydrationWarning>{children}</body>
+      </html>
+    </ClerkProvider>
   )
 }

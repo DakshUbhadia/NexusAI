@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react'
+import { UserButton } from '@clerk/nextjs'
 
 interface EditorNavbarProps {
   isOpen: boolean
@@ -20,8 +21,8 @@ export function EditorNavbar({
       className={cn(
         'fixed top-0 left-0 right-0 z-40',
         'flex items-center justify-between',
-        'h-[var(--topbar-height)]',
-        'bg-[var(--bg-surface)] border-b border-[var(--border-color)]',
+        'h-(--topbar-height)',
+        'bg-(--bg-surface) border-b border-(--border-color)',
         'px-3',
         className
       )}
@@ -64,5 +65,16 @@ export function NavbarCenter() {
 }
 
 export function NavbarRight() {
-  return <div className="flex items-center gap-2" />
+  return (
+    <div className="flex items-center gap-2">
+      <UserButton
+        appearance={{
+          elements: {
+            avatarBox: "w-8 h-8",
+            userButtonPopoverCard: "border border-(--border-color)",
+          },
+        }}
+      />
+    </div>
+  )
 }
