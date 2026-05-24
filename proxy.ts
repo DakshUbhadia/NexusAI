@@ -8,6 +8,12 @@ const isPublicRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
+  const pathname = req.nextUrl.pathname
+
+  if (/\.(png|jpe?g|webp|gif|svg|ico)$/i.exec(pathname)) {
+    return NextResponse.next()
+  }
+
   // Protect all non-public routes
   if (!isPublicRoute(req)) {
     const { userId } = await auth()
@@ -26,7 +32,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/((?!_next).*)",
     "/(api|trpc)(.*)",
   ],
 }
