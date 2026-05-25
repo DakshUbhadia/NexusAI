@@ -10,6 +10,8 @@
 !.yarn/releases
 !.yarn/versions
 .agents/
+context/
+AGENTS.md
 # testing
 /coverage
 
@@ -41,3 +43,4 @@ yarn-error.log*
 next-env.d.ts
 
 .early.coverage
+/app/generated/prisma
