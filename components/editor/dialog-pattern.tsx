@@ -3,28 +3,29 @@ import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
 
 interface DialogPatternProps extends React.ComponentProps<'div'> {
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-  className?: string
-  children: React.ReactNode
+  readonly open?: boolean
+  readonly onOpenChange?: (open: boolean) => void
+  readonly className?: string
+  readonly children: React.ReactNode
 }
 
 export function DialogPattern(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  { open, onOpenChange, className, children, ...props }: DialogPatternProps
+  // keep props typed as readonly to satisfy lint rules
+  props: Readonly<DialogPatternProps>
 ) {
+  const { open, onOpenChange, className, children, ...propsRest } = props
   return (
     <div
       className={cn(
         'rounded-lg',
-        'bg-[var(--bg-base)]',
-        'border border-[var(--border-color)]',
+        'bg-(--bg-base)',
+        'border border-(--border-color)',
         'shadow-lg',
         'overflow-hidden',
         'max-w-md w-full',
         className
       )}
-      {...props}
+      {...propsRest}
     >
       {children}
     </div>
@@ -41,7 +42,7 @@ export function DialogPatternHeader({
       className={cn(
         'flex flex-col gap-1',
         'px-6 py-5',
-        'border-b border-[var(--border-color)]',
+        'border-b border-(--border-color)',
         className
       )}
       {...props}
@@ -60,7 +61,7 @@ export function DialogPatternTitle({
     <h2
       className={cn(
         'text-base font-semibold',
-        'text-[var(--text-primary)]',
+        'text-(--text-primary)',
         className
       )}
       {...props}
@@ -79,7 +80,7 @@ export function DialogPatternDescription({
     <p
       className={cn(
         'text-sm',
-        'text-[var(--text-secondary)]',
+        'text-(--text-secondary)',
         className
       )}
       {...props}
@@ -100,7 +101,7 @@ export function DialogPatternBody({
         'px-6 py-5',
         'max-h-[calc(100vh-300px)]',
         'overflow-y-auto',
-        'text-[var(--text-primary)]',
+        'text-(--text-primary)',
         className
       )}
       {...props}
@@ -120,7 +121,7 @@ export function DialogPatternFooter({
       className={cn(
         'flex items-center justify-end gap-3',
         'px-6 py-4',
-        'border-t border-[var(--border-color)]',
+        'border-t border-(--border-color)',
         className
       )}
       {...props}
@@ -140,12 +141,12 @@ export function DialogPatternClose({
       className={cn(
         'inline-flex items-center justify-center',
         'rounded-md',
-        'text-[var(--text-secondary)]',
-        'hover:text-[var(--text-primary)]',
-        'hover:bg-[var(--bg-secondary)]',
+        'text-(--text-secondary)',
+        'hover:text-(--text-primary)',
+        'hover:bg-(--bg-secondary)',
         'transition-colors duration-200',
         'h-8 w-8',
-        'focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]'
+        'focus:outline-none focus:ring-2 focus:ring-(--accent-primary)'
       )}
       onClick={onClick}
       title="Close dialog"
