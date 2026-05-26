@@ -33,6 +33,8 @@ interface CreateProjectDialogProps {
   readonly projectName: string
   readonly projectSlug: string
   readonly projectSlugPreview: string
+  readonly projectRoomIdPreview?: string
+  readonly slugSpecialCharacters?: readonly string[]
   readonly onNameChange: (name: string) => void
   readonly isLoading: boolean
   readonly onSubmit: (name: string, slug: string) => void
@@ -45,6 +47,8 @@ export function CreateProjectDialog(props: CreateProjectDialogProps) {
     projectName,
     projectSlug,
     projectSlugPreview,
+    projectRoomIdPreview,
+    slugSpecialCharacters,
     onNameChange,
     isLoading,
     onSubmit,
@@ -88,14 +92,19 @@ export function CreateProjectDialog(props: CreateProjectDialogProps) {
 
           <div className="space-y-2">
             <label htmlFor="project-slug" className="text-sm font-medium text-(--text-primary)">
-              Live slug preview
+              Room ID preview
             </label>
             <div
               id="project-slug"
               className="rounded-md border border-(--border-color) bg-(--bg-subtle) px-3 py-2 text-sm text-(--text-secondary)"
             >
-              {projectSlugPreview || getDisplaySlug(projectName)}
+              {projectRoomIdPreview || projectSlugPreview || getDisplaySlug(projectName)}
             </div>
+            {slugSpecialCharacters && slugSpecialCharacters.length > 0 ? (
+              <p className="text-xs text-amber-400">
+                Special characters detected: {slugSpecialCharacters.join(' ')}
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter>

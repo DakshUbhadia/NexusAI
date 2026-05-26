@@ -1,3 +1,5 @@
+import { PrismaPg } from '@prisma/adapter-pg'
+
 import { PrismaClient } from '../app/generated/prisma/client'
 
 declare global {
@@ -7,12 +9,17 @@ declare global {
 
 const rawDbUrl = process.env.DATABASE_URL || ''
 
-if (rawDbUrl.startsWith('prisma+')) {
-  process.env.DATABASE_URL = rawDbUrl.replace(/^prisma\+/, '')
+if (!rawDbUrl) {
+  throw new Error('DATABASE_URL is required to initialize PrismaClient')
 }
 
-// @ts-expect-error: generated client may require adapter, but runtime accepts no-arg instantiation here
-const instantiate = () => new PrismaClient()
+const connectionString = rawDbUrl.replace(/^prisma\+/, '')
+
+const instantiate = () => {
+  const adapter = new PrismaPg({ connectionString })
+
+  return new PrismaClient({ adapter })
+}
 
 const prisma =
   (globalThis.__prismaClient !== undefined && process.env.NODE_ENV === 'development')

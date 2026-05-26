@@ -11,5 +11,5 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-// Project models (also copied to prisma/models/project.prisma)
+// Project models are defined in prisma/models/project.prisma
 
