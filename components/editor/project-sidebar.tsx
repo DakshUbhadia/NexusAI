@@ -7,21 +7,16 @@ import { PencilLine, Plus, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-
-export interface ProjectSidebarProject {
-  readonly id: string
-  readonly name: string
-  readonly slug: string
-  readonly owned: boolean
-}
+import type { EditorProject } from '@/lib/editor-projects'
 
 interface ProjectSidebarProps {
   readonly isOpen: boolean
   readonly onClose: () => void
   readonly onCreateProject: () => void
-  readonly onRenameProject: (project: ProjectSidebarProject) => void
-  readonly onDeleteProject: (project: ProjectSidebarProject) => void
-  readonly projects: readonly ProjectSidebarProject[]
+  readonly onRenameProject: (project: EditorProject) => void
+  readonly onDeleteProject: (project: EditorProject) => void
+  readonly ownedProjects: readonly EditorProject[]
+  readonly sharedProjects: readonly EditorProject[]
   readonly className?: string
 }
 
@@ -32,7 +27,8 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
     onCreateProject,
     onRenameProject,
     onDeleteProject,
-    projects,
+    ownedProjects,
+    sharedProjects,
     className,
   } = props
 
@@ -82,7 +78,8 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         <SidebarTabs
           onDeleteProject={onDeleteProject}
           onRenameProject={onRenameProject}
-          projects={projects}
+          ownedProjects={ownedProjects}
+          sharedProjects={sharedProjects}
         />
         <SidebarFooter onCreateProject={onCreateProject} />
       </aside>
@@ -114,15 +111,14 @@ export function SidebarHeader({ onClose }: Readonly<{ onClose: () => void }>) {
 }
 
 interface SidebarTabsProps {
-  readonly projects: readonly ProjectSidebarProject[]
-  readonly onRenameProject: (project: ProjectSidebarProject) => void
-  readonly onDeleteProject: (project: ProjectSidebarProject) => void
+  readonly ownedProjects: readonly EditorProject[]
+  readonly sharedProjects: readonly EditorProject[]
+  readonly onRenameProject: (project: EditorProject) => void
+  readonly onDeleteProject: (project: EditorProject) => void
 }
 
 function SidebarTabs(props: SidebarTabsProps) {
-  const { projects, onRenameProject, onDeleteProject } = props
-  const ownedProjects = projects.filter((project) => project.owned)
-  const sharedProjects = projects.filter((project) => !project.owned)
+  const { ownedProjects, sharedProjects, onRenameProject, onDeleteProject } = props
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -164,10 +160,10 @@ function SidebarTabs(props: SidebarTabsProps) {
 }
 
 interface ProjectListProps {
-  readonly projects: readonly ProjectSidebarProject[]
+  readonly projects: readonly EditorProject[]
   readonly emptyLabel?: string
-  readonly onRenameProject?: (project: ProjectSidebarProject) => void
-  readonly onDeleteProject?: (project: ProjectSidebarProject) => void
+  readonly onRenameProject?: (project: EditorProject) => void
+  readonly onDeleteProject?: (project: EditorProject) => void
 }
 
 function ProjectList(props: ProjectListProps) {
@@ -186,7 +182,7 @@ function ProjectList(props: ProjectListProps) {
         >
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-(--text-primary)">{project.name}</p>
-            <p className="truncate text-xs text-(--text-secondary)">{project.slug}</p>
+            <p className="truncate text-xs text-(--text-secondary)">{project.roomId}</p>
           </div>
 
           {project.owned && onRenameProject && onDeleteProject ? (
