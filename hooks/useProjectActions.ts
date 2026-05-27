@@ -153,7 +153,7 @@ export function useProjectActions(options: UseProjectActionsOptions = {}): UsePr
 
       const project = await response.json()
       closeDialog()
-      router.push(`/editor?projectId=${encodeURIComponent(project.id)}`)
+      router.push(`/editor/${encodeURIComponent(project.id)}`)
     } finally {
       setIsLoading(false)
     }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 import { Plus } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
 import { EditorNavbar } from '@/components/editor/editor-navbar'
@@ -30,6 +31,7 @@ function findProjectById(projectId: string | undefined, projects: readonly { id:
 
 export function EditorHomeClient(props: EditorHomeClientProps) {
   const { ownedProjects, sharedProjects, activeProjectId } = props
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const projectActions = useProjectActions({ activeProjectId })
 
@@ -54,6 +56,7 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
         onClose={() => setSidebarOpen(false)}
         onCreateProject={projectActions.openCreateDialog}
         onDeleteProject={(project) => projectActions.openDeleteDialog(project.id, project.name)}
+        onOpenProject={(project) => router.push(`/editor/${project.id}`)}
         onRenameProject={(project) => projectActions.openRenameDialog(project.id, project.name)}
         ownedProjects={ownedProjects}
         sharedProjects={sharedProjects}
