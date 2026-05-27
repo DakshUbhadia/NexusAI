@@ -13,7 +13,24 @@ if (!rawDbUrl) {
   throw new Error('DATABASE_URL is required to initialize PrismaClient')
 }
 
-const connectionString = rawDbUrl.replace(/^prisma\+/, '')
+function normalizeConnectionString(url: string): string {
+  const connectionUrl = url.replace(/^prisma\+/, '')
+
+  try {
+    const parsedUrl = new URL(connectionUrl)
+    const sslMode = parsedUrl.searchParams.get('sslmode')
+
+    if (sslMode === 'prefer' || sslMode === 'require' || sslMode === 'verify-ca') {
+      parsedUrl.searchParams.set('sslmode', 'verify-full')
+    }
+
+    return parsedUrl.toString()
+  } catch {
+    return connectionUrl
+  }
+}
+
+const connectionString = normalizeConnectionString(rawDbUrl)
 
 const instantiate = () => {
   const adapter = new PrismaPg({ connectionString })
