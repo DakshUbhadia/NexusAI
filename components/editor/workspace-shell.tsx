@@ -21,6 +21,7 @@ import {
   RenameProjectDialog,
 } from '@/components/editor/project-dialogs'
 import { ProjectSidebar } from '@/components/editor/project-sidebar'
+import { ShareDialog } from '@/components/editor/share-dialog'
 import { Button } from '@/components/ui/button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
 import { cn } from '@/lib/utils'
@@ -46,6 +47,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
   const projectActions = useProjectActions({ activeProjectId: currentRoomId })
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(true)
   const [aiSidebarOpen, setAiSidebarOpen] = useState(true)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
 
   const selectedOwnedProject = findOwnedProject(
     projectActions.dialogState.projectId,
@@ -55,6 +57,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
     projectActions.dialogState.type === 'delete'
       ? ownedProjects.find((project) => project.id === projectActions.dialogState.projectId)
       : undefined
+  const isOwner = ownedProjects.some((project) => project.id === currentRoomId)
 
   return (
     <>
@@ -73,7 +76,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             </Button>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-(--accent-secondary) shadow-[var(--shadow-glow-cyan)]" />
+                <span className="h-2 w-2 rounded-full bg-(--accent-secondary) shadow-(--shadow-glow-cyan)" />
                 <p className="truncate text-sm font-semibold text-(--text-primary)">{projectName}</p>
               </div>
               <p className="truncate text-xs text-(--text-muted)">Room {currentRoomId}</p>
@@ -81,7 +84,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button className="gap-2" type="button" variant="outline">
+            <Button className="gap-2" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
               <Share2 className="size-4" />
               Share
             </Button>
@@ -125,14 +128,14 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
 
             <section className="relative flex min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_24%,var(--accent-secondary-muted),transparent_26%),linear-gradient(var(--border-subtle)_1px,transparent_1px),linear-gradient(90deg,var(--border-subtle)_1px,transparent_1px),var(--bg-base)] bg-size-[auto,26px_26px,26px_26px,auto]">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_70%,transparent,var(--bg-base))]" />
-              <div className="absolute left-4 top-4 z-20 flex items-center gap-2 rounded-full border border-(--border-default) bg-(--bg-overlay) px-3 py-2 shadow-[var(--shadow-md)] backdrop-blur-xl">
+              <div className="absolute left-4 top-4 z-20 flex items-center gap-2 rounded-full border border-(--border-default) bg-(--bg-overlay) px-3 py-2 shadow-(--shadow-md) backdrop-blur-xl">
                 <Radio className="ai-active-indicator size-3.5" />
                 <span className="text-xs text-(--text-secondary)">Workspace shell online</span>
               </div>
 
               <div className="relative z-10 flex h-full w-full items-center justify-center px-6">
                 <div className="flex max-w-2xl flex-col items-center text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface) shadow-[var(--shadow-glow-cyan)]">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface) shadow-(--shadow-glow-cyan)">
                     <LayoutTemplate className="size-5 text-(--accent-secondary)" />
                   </div>
                   <p className="mt-4 text-xs font-medium tracking-[0.28em] text-(--text-muted)">WORKSPACE SHELL</p>
@@ -175,7 +178,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
                   </div>
                 </div>
                 <div className="flex flex-1 flex-col gap-4 px-4 py-4">
-                  <div className="rounded-lg border border-(--border-default) bg-(--bg-surface) p-4 shadow-[var(--shadow-md)]">
+                  <div className="rounded-lg border border-(--border-default) bg-(--bg-surface) p-4 shadow-(--shadow-md)">
                     <p className="text-sm font-semibold text-(--text-primary)">Chat surface pending</p>
                     <p className="mt-2 text-xs leading-relaxed text-(--text-secondary)">
                       The toggle is wired. Messaging and generation are intentionally out of scope here.
@@ -244,6 +247,14 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         onSubmit={projectActions.submitDeleteProject}
         open={projectActions.dialogState.type === 'delete'}
         projectName={selectedDeleteProject?.name ?? 'this project'}
+      />
+
+      <ShareDialog
+        isOwner={isOwner}
+        onOpenChange={setShareDialogOpen}
+        open={shareDialogOpen}
+        projectId={currentRoomId}
+        projectName={projectName}
       />
     </>
   )
