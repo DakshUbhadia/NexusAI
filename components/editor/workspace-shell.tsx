@@ -4,12 +4,10 @@ import { useState } from 'react'
 
 import { UserButton } from '@clerk/nextjs'
 import {
-  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
-  Radio,
   Share2,
   Sparkles,
 } from 'lucide-react'
@@ -20,6 +18,7 @@ import {
   DeleteProjectDialog,
   RenameProjectDialog,
 } from '@/components/editor/project-dialogs'
+import { CollaborativeCanvas } from '@/components/editor/canvas/collaborative-canvas'
 import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { Button } from '@/components/ui/button'
@@ -126,39 +125,8 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               />
             ) : null}
 
-            <section className="relative flex min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_50%_24%,var(--accent-secondary-muted),transparent_26%),linear-gradient(var(--border-subtle)_1px,transparent_1px),linear-gradient(90deg,var(--border-subtle)_1px,transparent_1px),var(--bg-base)] bg-size-[auto,26px_26px,26px_26px,auto]">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_70%,transparent,var(--bg-base))]" />
-              <div className="absolute left-4 top-4 z-20 flex items-center gap-2 rounded-full border border-(--border-default) bg-(--bg-overlay) px-3 py-2 shadow-(--shadow-md) backdrop-blur-xl">
-                <Radio className="ai-active-indicator size-3.5" />
-                <span className="text-xs text-(--text-secondary)">Workspace shell online</span>
-              </div>
-
-              <div className="relative z-10 flex h-full w-full items-center justify-center px-6">
-                <div className="flex max-w-2xl flex-col items-center text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface) shadow-(--shadow-glow-cyan)">
-                    <LayoutTemplate className="size-5 text-(--accent-secondary)" />
-                  </div>
-                  <p className="mt-4 text-xs font-medium tracking-[0.28em] text-(--text-muted)">WORKSPACE SHELL</p>
-                  <h2 className="mt-3 text-2xl font-semibold text-(--text-primary)">
-                    Canvas and collaboration tooling land here next.
-                  </h2>
-                  <p className="mt-3 text-sm leading-relaxed text-(--text-secondary)">
-                    This room is ready for the shared architecture canvas, durable AI workflows, and real-time
-                    presence. For now, the shell is wired with project context and navigation.
-                  </p>
-                  <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-                    <span className="rounded-full border border-(--border-default) bg-(--bg-surface-elevated) px-3 py-1 text-xs text-(--text-secondary)">
-                      Live presence
-                    </span>
-                    <span className="rounded-full border border-(--border-default) bg-(--bg-surface-elevated) px-3 py-1 text-xs text-(--text-secondary)">
-                      Shared canvas
-                    </span>
-                    <span className="rounded-full border border-(--border-default) bg-(--bg-surface-elevated) px-3 py-1 text-xs text-(--text-secondary)">
-                      AI pipelines
-                    </span>
-                  </div>
-                </div>
-              </div>
+            <section className="relative flex min-w-0 flex-1 overflow-hidden bg-(--bg-base)">
+              <CollaborativeCanvas roomId={currentRoomId} />
             </section>
 
             <aside
