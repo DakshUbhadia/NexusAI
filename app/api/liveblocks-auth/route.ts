@@ -5,6 +5,8 @@ import { currentUser } from '@clerk/nextjs/server'
 import { ensureRoomAccess, getPresenceColor, liveblocks } from '@/lib/liveblocks'
 import { hasProjectAccess } from '@/lib/project-access'
 
+export const runtime = 'nodejs'
+
 const roomSchema = z.union([
   z.object({ room: z.string().min(1) }),
   z.object({ roomId: z.string().min(1) }),
