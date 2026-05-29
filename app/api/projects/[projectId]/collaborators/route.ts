@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { clerkClient } from '@clerk/nextjs/server'
@@ -28,16 +28,16 @@ const removeSchema = z.object({
 })
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     projectId: string
-  }
+  }>
 }
 
 function errorResponse(message: string, code: string, status: number) {
   return NextResponse.json({ error: { message, code } }, { status })
 }
 
-function isSameOrigin(request: Request): boolean {
+function isSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get('origin')
 
   if (!origin) {
@@ -96,14 +96,14 @@ async function fetchClerkProfiles(emails: string[]): Promise<Map<string, Collabo
   }
 }
 
-export async function GET(_req: Request, context: RouteContext): Promise<Response> {
+export async function GET(_req: NextRequest, context: RouteContext): Promise<Response> {
   const identity = await getCurrentClerkIdentity()
 
   if (!identity) {
     return errorResponse('Authentication required.', 'unauthorized', 401)
   }
 
-  const params = await Promise.resolve(context.params)
+  const params = await context.params
   const projectId = params.projectId
 
   if (!projectId) {
@@ -156,7 +156,7 @@ export async function GET(_req: Request, context: RouteContext): Promise<Respons
   })
 }
 
-export async function POST(req: Request, context: RouteContext): Promise<Response> {
+export async function POST(req: NextRequest, context: RouteContext): Promise<Response> {
   const identity = await getCurrentClerkIdentity()
 
   if (!identity) {
@@ -167,7 +167,7 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
     return errorResponse('Invalid request origin.', 'forbidden', 403)
   }
 
-  const params = await Promise.resolve(context.params)
+  const params = await context.params
   const projectId = params.projectId
 
   if (!projectId) {
@@ -233,7 +233,7 @@ export async function POST(req: Request, context: RouteContext): Promise<Respons
   )
 }
 
-export async function DELETE(req: Request, context: RouteContext): Promise<Response> {
+export async function DELETE(req: NextRequest, context: RouteContext): Promise<Response> {
   const identity = await getCurrentClerkIdentity()
 
   if (!identity) {
@@ -244,7 +244,7 @@ export async function DELETE(req: Request, context: RouteContext): Promise<Respo
     return errorResponse('Invalid request origin.', 'forbidden', 403)
   }
 
-  const params = await Promise.resolve(context.params)
+  const params = await context.params
   const projectId = params.projectId
 
   if (!projectId) {

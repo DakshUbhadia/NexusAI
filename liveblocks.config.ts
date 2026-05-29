@@ -13,7 +13,7 @@ declare global {
 
     // The Storage tree for the room, for useMutation, useStorage, etc.
     Storage: {
-      flow: LiveblocksFlow<CanvasNode, CanvasEdge>
+      flow?: LiveblocksFlow<CanvasNode, CanvasEdge>
     };
 
     // Custom user info set when authenticating with a secret key
@@ -21,7 +21,7 @@ declare global {
       id: string;
       info: {
         name: string
-        avatar: string | null
+        avatar: string
         color: string
       };
     };

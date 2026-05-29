@@ -44,8 +44,8 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
   const { currentRoomId, projectName, ownedProjects, sharedProjects } = props
   const router = useRouter()
   const projectActions = useProjectActions({ activeProjectId: currentRoomId })
-  const [projectSidebarOpen, setProjectSidebarOpen] = useState(true)
-  const [aiSidebarOpen, setAiSidebarOpen] = useState(true)
+  const [projectSidebarOpen, setProjectSidebarOpen] = useState(false)
+  const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
 
   const selectedOwnedProject = findOwnedProject(
@@ -60,7 +60,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
 
   return (
     <>
-      <div className="min-h-screen bg-[radial-gradient(circle_at_20%_0%,var(--accent-primary-muted),transparent_32%),radial-gradient(circle_at_82%_0%,var(--accent-purple-muted),transparent_34%),var(--bg-base)] text-(--text-primary)">
+      <div className="min-h-screen bg-(--bg-base) text-(--text-primary)">
         <nav className="fixed inset-x-0 top-0 z-40 flex h-(--topbar-height) items-center justify-between border-b border-(--border-default) bg-(--bg-overlay) px-3 backdrop-blur-xl">
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -108,7 +108,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         </nav>
 
         <main className="pt-(--topbar-height)">
-          <div className="flex h-[calc(100vh-var(--topbar-height))] min-h-0">
+          <div className="flex h-[calc(100dvh-var(--topbar-height))] min-h-0">
             {projectSidebarOpen ? (
               <ProjectSidebar
                 activeProjectId={currentRoomId}

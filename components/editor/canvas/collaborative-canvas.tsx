@@ -1,6 +1,6 @@
 'use client'
 
-import { Component, type ErrorInfo, type ReactNode, useCallback, useState } from 'react'
+import { Component, type ErrorInfo, type ReactElement, type ReactNode, useCallback, useState } from 'react'
 
 import dynamic from 'next/dynamic'
 
@@ -49,7 +49,7 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, CanvasErro
   }
 }
 
-export function CollaborativeCanvas({ roomId }: CollaborativeCanvasProps): JSX.Element {
+export function CollaborativeCanvas({ roomId }: CollaborativeCanvasProps): ReactElement {
   const [retryKey, setRetryKey] = useState(0)
 
   const handleRetry = useCallback(() => {
@@ -57,7 +57,7 @@ export function CollaborativeCanvas({ roomId }: CollaborativeCanvasProps): JSX.E
   }, [])
 
   return (
-    <div className="h-full w-full">
+    <div className="relative h-full w-full overflow-hidden bg-(--bg-base)">
       <CanvasErrorBoundary onRetry={handleRetry}>
         <LiveblocksRoomProvider key={retryKey} roomId={roomId}>
           <ClientSideSuspense fallback={<CanvasLoading />}>
