@@ -22,32 +22,32 @@ const SHAPES: ShapeConfig[] = [
   {
     shape: 'rectangle',
     label: 'Rectangle',
-    size: { width: 176, height: 80 },
+    size: { width: 360, height: 180 },
   },
   {
     shape: 'diamond',
     label: 'Diamond',
-    size: { width: 192, height: 96 },
+    size: { width: 360, height: 280 },
   },
   {
     shape: 'circle',
     label: 'Circle',
-    size: { width: 96, height: 96 },
+    size: { width: 260, height: 260 },
   },
   {
     shape: 'pill',
     label: 'Pill',
-    size: { width: 176, height: 80 },
+    size: { width: 420, height: 180 },
   },
   {
     shape: 'cylinder',
     label: 'Cylinder',
-    size: { width: 160, height: 96 },
+    size: { width: 280, height: 180 },
   },
   {
     shape: 'hexagon',
     label: 'Hexagon',
-    size: { width: 176, height: 96 },
+    size: { width: 320, height: 220 },
   },
 ]
 
@@ -133,7 +133,7 @@ export function ShapePanel({ className }: ShapePanelProps) {
   return (
     <div
       className={cn(
-        'flex items-center gap-2 rounded-full border border-(--border-default) bg-(--bg-overlay) px-3 py-2 shadow-(--shadow-lg) backdrop-blur-xl',
+        'flex items-center gap-2 rounded-full border border-(--border-default) bg-(--bg-overlay) px-4 py-2.5 shadow-(--shadow-lg) backdrop-blur-xl',
         className
       )}
     >
@@ -141,7 +141,7 @@ export function ShapePanel({ className }: ShapePanelProps) {
         <button
           key={config.shape}
           aria-label={`Drag ${config.label}`}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface) text-(--text-secondary) transition-colors duration-200 hover:border-(--border-strong) hover:bg-(--bg-subtle) hover:text-(--text-primary)"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-(--text-secondary) transition-colors duration-200 hover:bg-(--bg-subtle) hover:text-(--text-primary)"
           draggable
           onDragStart={(event) => handleDragStart(event, config)}
           type="button"

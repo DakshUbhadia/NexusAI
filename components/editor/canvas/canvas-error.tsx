@@ -1,12 +1,14 @@
 'use client'
 
+import type { ReactElement } from 'react'
+
 import { Button } from '@/components/ui/button'
 
 interface CanvasErrorProps {
   readonly onRetry: () => void
 }
 
-export function CanvasError({ onRetry }: CanvasErrorProps): JSX.Element {
+export function CanvasError({ onRetry }: CanvasErrorProps): ReactElement {
   return (
     <div className="flex h-full w-full items-center justify-center bg-(--bg-base)">
       <div className="w-full max-w-md rounded-xl border border-(--border-default) bg-(--bg-surface) px-6 py-6 text-center shadow-(--shadow-lg)">

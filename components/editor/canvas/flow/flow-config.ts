@@ -2,8 +2,8 @@ import { BackgroundVariant, type BackgroundProps, type MiniMapProps } from '@xyf
 
 export const flowBackgroundProps = {
   variant: BackgroundVariant.Dots,
-  gap: 26,
-  size: 2.2,
+  gap: 56,
+  size: 1.6,
   color: 'var(--border-default)',
   bgColor: 'var(--bg-base)',
   patternClassName: 'nexus-flow-pattern',

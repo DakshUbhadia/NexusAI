@@ -71,13 +71,11 @@ export async function POST(req: Request): Promise<Response> {
 
   const name = buildDisplayName(user)
   const { status, body } = await liveblocks.identifyUser(
-    {
-      userId: identity.userId,
-    },
+    identity.userId,
     {
       userInfo: {
         name,
-        avatar: user.imageUrl ?? null,
+        avatar: user.imageUrl ?? '',
         color: getPresenceColor(identity.userId),
       },
     }

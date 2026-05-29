@@ -2,10 +2,6 @@ import 'server-only'
 
 import { Liveblocks } from '@liveblocks/node'
 
-type RoomAccess = ('room:read' | 'room:write' | 'room:presence:write')[]
-
-type RoomAccessMap = Record<string, RoomAccess>
-
 declare global {
   // eslint-disable-next-line no-var
   var __liveblocksClient: Liveblocks | undefined
@@ -54,13 +50,17 @@ export function getPresenceColor(userId: string): PresenceColor {
 }
 
 export async function ensureRoomAccess(roomId: string, userId: string): Promise<void> {
-  const access: RoomAccessMap = {
+  const access: Record<string, ['room:write']> = {
     [userId]: ['room:write'],
   }
 
   try {
     const room = await liveblocks.getRoom(roomId)
     const usersAccesses = room.usersAccesses ?? {}
+    const syncedUsersAccesses = usersAccesses as unknown as Record<
+      string,
+      ['room:write'] | ['room:read', 'room:presence:write'] | null
+    >
 
     if (usersAccesses[userId]) {
       return
@@ -68,7 +68,7 @@ export async function ensureRoomAccess(roomId: string, userId: string): Promise<
 
     await liveblocks.updateRoom(roomId, {
       usersAccesses: {
-        ...usersAccesses,
+        ...syncedUsersAccesses,
         ...access,
       },
     })

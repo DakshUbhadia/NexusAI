@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 
 import { LiveblocksProvider, RoomProvider } from '@liveblocks/react'
 
@@ -12,7 +12,7 @@ interface LiveblocksRoomProviderProps {
 export function LiveblocksRoomProvider({
   roomId,
   children,
-}: LiveblocksRoomProviderProps): JSX.Element {
+}: LiveblocksRoomProviderProps): ReactElement {
   return (
     <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
       <RoomProvider

@@ -1,6 +1,8 @@
 'use client'
 
-export function CanvasLoading(): JSX.Element {
+import type { ReactElement } from 'react'
+
+export function CanvasLoading(): ReactElement {
   return (
     <div className="flex h-full w-full items-center justify-center bg-(--bg-base)" role="status" aria-live="polite">
       <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-xl border border-(--border-default) bg-(--bg-surface) px-6 py-6 text-center shadow-(--shadow-lg)">
