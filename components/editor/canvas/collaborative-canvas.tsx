@@ -9,6 +9,7 @@ import { ClientSideSuspense } from '@liveblocks/react'
 import { CanvasError } from '@/components/editor/canvas/canvas-error'
 import { CanvasLoading } from '@/components/editor/canvas/canvas-loading'
 import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
+import type { CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
 const FlowCanvas = dynamic(() => import('./flow/flow-canvas').then((mod) => mod.FlowCanvas), {
   ssr: false,
@@ -16,6 +17,7 @@ const FlowCanvas = dynamic(() => import('./flow/flow-canvas').then((mod) => mod.
 
 interface CollaborativeCanvasProps {
   readonly roomId: string
+  readonly templateImportRequest?: CanvasTemplateImportRequest | null
 }
 
 interface CanvasErrorBoundaryProps {
@@ -49,7 +51,10 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, CanvasErro
   }
 }
 
-export function CollaborativeCanvas({ roomId }: CollaborativeCanvasProps): ReactElement {
+export function CollaborativeCanvas({
+  roomId,
+  templateImportRequest = null,
+}: CollaborativeCanvasProps): ReactElement {
   const [retryKey, setRetryKey] = useState(0)
 
   const handleRetry = useCallback(() => {
@@ -61,7 +66,7 @@ export function CollaborativeCanvas({ roomId }: CollaborativeCanvasProps): React
       <CanvasErrorBoundary onRetry={handleRetry}>
         <LiveblocksRoomProvider key={retryKey} roomId={roomId}>
           <ClientSideSuspense fallback={<CanvasLoading />}>
-            <FlowCanvas />
+            <FlowCanvas templateImportRequest={templateImportRequest} />
           </ClientSideSuspense>
         </LiveblocksRoomProvider>
       </CanvasErrorBoundary>

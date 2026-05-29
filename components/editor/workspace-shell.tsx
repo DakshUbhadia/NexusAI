@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  LayoutTemplate,
   Share2,
   Sparkles,
 } from 'lucide-react'
@@ -21,11 +22,13 @@ import {
 import { CollaborativeCanvas } from '@/components/editor/canvas/collaborative-canvas'
 import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { ShareDialog } from '@/components/editor/share-dialog'
+import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
 import { Button } from '@/components/ui/button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
 import { cn } from '@/lib/utils'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
+import type { CanvasTemplate, CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
 interface WorkspaceShellProps extends EditorProjectLists {
   readonly currentRoomId: string
@@ -47,6 +50,9 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false)
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [templateImportRequest, setTemplateImportRequest] =
+    useState<CanvasTemplateImportRequest | null>(null)
 
   const selectedOwnedProject = findOwnedProject(
     projectActions.dialogState.projectId,
@@ -57,6 +63,12 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
       ? ownedProjects.find((project) => project.id === projectActions.dialogState.projectId)
       : undefined
   const isOwner = ownedProjects.some((project) => project.id === currentRoomId)
+  const handleTemplateImport = (template: CanvasTemplate): void => {
+    setTemplateImportRequest((current) => ({
+      requestId: (current?.requestId ?? 0) + 1,
+      template,
+    }))
+  }
 
   return (
     <>
@@ -83,6 +95,10 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button className="gap-2" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
+              <LayoutTemplate className="size-4" />
+              Templates
+            </Button>
             <Button className="gap-2" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
               <Share2 className="size-4" />
               Share
@@ -126,7 +142,10 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             ) : null}
 
             <section className="relative flex min-w-0 flex-1 overflow-hidden bg-(--bg-base)">
-              <CollaborativeCanvas roomId={currentRoomId} />
+              <CollaborativeCanvas
+                roomId={currentRoomId}
+                templateImportRequest={templateImportRequest}
+              />
             </section>
 
             <aside
@@ -223,6 +242,12 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         open={shareDialogOpen}
         projectId={currentRoomId}
         projectName={projectName}
+      />
+
+      <StarterTemplatesModal
+        onImport={handleTemplateImport}
+        onOpenChange={setTemplatesOpen}
+        open={templatesOpen}
       />
     </>
   )
