@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react'
+import { z } from 'zod'
 
 export type CanvasNodeShape = 'rectangle' | 'diamond' | 'circle' | 'pill' | 'cylinder' | 'hexagon'
 
@@ -67,3 +68,44 @@ export type CanvasFlow = {
   nodes: CanvasNode[]
   edges: CanvasEdge[]
 }
+
+export const canvasNodeShapeSchema = z.enum(['rectangle', 'diamond', 'circle', 'pill', 'cylinder', 'hexagon'])
+export const canvasNodeColorKeySchema = z.enum(['cyan', 'violet', 'success', 'warning'])
+
+export const canvasNodeSchema = z
+  .object({
+    id: z.string().min(1),
+    type: z.literal('canvasNode').optional(),
+    position: z
+      .object({
+        x: z.number(),
+        y: z.number(),
+      })
+      .passthrough(),
+    data: z
+      .object({
+        label: z.string(),
+        color: canvasNodeColorKeySchema,
+        shape: canvasNodeShapeSchema,
+        size: z.object({
+          width: z.number().positive(),
+          height: z.number().positive(),
+        }),
+      })
+      .passthrough(),
+  })
+  .passthrough() as z.ZodType<CanvasNode>
+
+export const canvasEdgeSchema = z
+  .object({
+    id: z.string().min(1),
+    source: z.string().min(1),
+    target: z.string().min(1),
+    type: z.literal('canvasEdge').optional(),
+  })
+  .passthrough() as z.ZodType<CanvasEdge>
+
+export const canvasFlowSchema = z.object({
+  nodes: z.array(canvasNodeSchema),
+  edges: z.array(canvasEdgeSchema),
+}) satisfies z.ZodType<CanvasFlow>

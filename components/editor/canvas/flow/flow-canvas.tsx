@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 
 import {
   Background,
@@ -14,6 +14,7 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
+import { useCanRedo, useCanUndo, useHistory, useRedo, useUndo, useUpdateMyPresence } from '@liveblocks/react'
 import { useLiveblocksFlow } from '@liveblocks/react-flow'
 
 import { CanvasNodeRenderer } from '@/components/editor/canvas/nodes/canvas-node'
@@ -23,70 +24,14 @@ import { DEFAULT_NODE_COLOR_KEY } from '@/types/canvas'
 
 import { flowBackgroundProps } from './flow-config'
 import { NodeEditingContext } from './node-editing-context'
+import { PresenceOverlay } from './presence-overlay'
 import CanvasControls from '@/components/editor/canvas/controls/canvas-controls'
 import useKeyboardShortcuts from '@/hooks/useKeyboardShortcuts'
-import { useUndo, useRedo, useCanUndo, useCanRedo, useHistory } from '@liveblocks/react'
+import { useCanvasAutosave, type CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
+import { canvasFlowSchema, type CanvasFlow } from '@/types/canvas'
 
 const DEFAULT_NODE_COLOR: CanvasNodeColorKey = DEFAULT_NODE_COLOR_KEY
-const DEFAULT_LAYOUT_NODES: CanvasNode[] = [
-  {
-    id: 'shape-rectangle-seed',
-    type: 'canvasNode',
-    position: { x: 360, y: 170 },
-    data: {
-      label: '',
-      color: DEFAULT_NODE_COLOR,
-      shape: 'rectangle',
-      size: { width: 380, height: 190 },
-    },
-  },
-  {
-    id: 'shape-diamond-seed',
-    type: 'canvasNode',
-    position: { x: 280, y: 520 },
-    data: {
-      label: '',
-      color: DEFAULT_NODE_COLOR,
-      shape: 'diamond',
-      size: { width: 380, height: 300 },
-    },
-  },
-  {
-    id: 'shape-circle-top-seed',
-    type: 'canvasNode',
-    position: { x: 960, y: 270 },
-    data: {
-      label: '',
-      color: DEFAULT_NODE_COLOR,
-      shape: 'circle',
-      size: { width: 280, height: 280 },
-    },
-  },
-  {
-    id: 'shape-oval-seed',
-    type: 'canvasNode',
-    position: { x: 780, y: 630 },
-    data: {
-      label: '',
-      color: DEFAULT_NODE_COLOR,
-      shape: 'circle',
-      size: { width: 300, height: 300 },
-    },
-  },
-  {
-    id: 'shape-pill-seed',
-    type: 'canvasNode',
-    position: { x: 1260, y: 700 },
-    data: {
-      label: '',
-      color: DEFAULT_NODE_COLOR,
-      shape: 'pill',
-      size: { width: 460, height: 190 },
-    },
-  },
-]
-
 const SHAPE_VALUES: ReadonlySet<CanvasNodeShape> = new Set([
   'rectangle',
   'diamond',
@@ -97,7 +42,11 @@ const SHAPE_VALUES: ReadonlySet<CanvasNodeShape> = new Set([
 ])
 
 type FlowCanvasProps = {
+  readonly projectId: string
   readonly templateImportRequest?: CanvasTemplateImportRequest | null
+  readonly onSaveNowChange?: (saveNow: (() => Promise<void>) | null) => void
+  readonly onSaveErrorMessageChange?: (message: string | null) => void
+  readonly onSaveStatusChange?: (status: CanvasSaveStatus) => void
 }
 
 function cloneTemplateNode(node: CanvasNode): CanvasNode {
@@ -164,21 +113,31 @@ function parseShapePayload(raw: string): ShapeDragPayload | null {
   }
 }
 
-export function FlowCanvas({ templateImportRequest = null }: FlowCanvasProps): ReactElement {
+export function FlowCanvas(props: FlowCanvasProps): ReactElement {
   return (
     <div className="h-full w-full">
       <ReactFlowProvider>
-        <FlowCanvasInner templateImportRequest={templateImportRequest} />
+        <FlowCanvasInner {...props} />
       </ReactFlowProvider>
     </div>
   )
 }
 
-function FlowCanvasInner({ templateImportRequest }: FlowCanvasProps): ReactElement {
+function FlowCanvasInner({
+  onSaveErrorMessageChange,
+  onSaveNowChange,
+  onSaveStatusChange,
+  projectId,
+  templateImportRequest,
+}: FlowCanvasProps): ReactElement {
   const edgeTypes = useMemo(() => ({}), [])
   const typedNodeTypes = useMemo(() => ({ canvasNode: CanvasNodeRenderer }), [])
+  const [isSavedCanvasLoading, setIsSavedCanvasLoading] = useState(true)
   const hasFitViewRef = useRef(false)
+  const loadAttemptedRef = useRef(false)
   const lastTemplateImportRequestRef = useRef<number | null>(null)
+  const latestEdgesRef = useRef<CanvasEdge[]>([])
+  const latestNodesRef = useRef<CanvasNode[]>([])
   const shapeCounter = useRef(0)
   const reactFlow = useReactFlow<CanvasNode, CanvasEdge>()
   const defaultEdgeOptions = useMemo(
@@ -200,19 +159,32 @@ function FlowCanvasInner({ templateImportRequest }: FlowCanvasProps): ReactEleme
     CanvasEdge
   >({
     nodes: {
-      initial: DEFAULT_LAYOUT_NODES,
+      initial: [],
     },
     edges: {
       initial: [],
     },
     suspense: true,
   })
+  const hasExistingCanvas = nodes.length > 0 || edges.length > 0
 
   const undo = useUndo()
   const redo = useRedo()
   const canUndo = useCanUndo()
   const canRedo = useCanRedo()
   const history = useHistory()
+  const updateMyPresence = useUpdateMyPresence()
+  const autosave = useCanvasAutosave({
+    projectId,
+    nodes,
+    edges,
+    enabled: hasExistingCanvas || !isSavedCanvasLoading,
+  })
+
+  useEffect(() => {
+    latestEdgesRef.current = edges
+    latestNodesRef.current = nodes
+  }, [edges, nodes])
 
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -262,6 +234,83 @@ function FlowCanvasInner({ templateImportRequest }: FlowCanvasProps): ReactEleme
     },
     [onNodesChange, reactFlow]
   )
+
+  useEffect(() => {
+    if (loadAttemptedRef.current) {
+      return
+    }
+
+    if (hasExistingCanvas) {
+      loadAttemptedRef.current = true
+      return
+    }
+
+    loadAttemptedRef.current = true
+    let cancelled = false
+
+    async function loadSavedCanvas(): Promise<void> {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/canvas`, {
+          cache: 'no-store',
+        })
+
+        if (!response.ok) {
+          throw new Error(`Canvas load failed with ${response.status}`)
+        }
+
+        const payload: unknown = await response.json()
+        const parsed = canvasFlowSchema.nullable().safeParse(
+          typeof payload === 'object' && payload !== null && 'data' in payload
+            ? (payload as { data?: { canvas?: unknown } }).data?.canvas ?? null
+            : null
+        )
+
+        if (!parsed.success || !parsed.data || cancelled) {
+          return
+        }
+
+        if (latestNodesRef.current.length > 0 || latestEdgesRef.current.length > 0) {
+          return
+        }
+
+        const savedCanvas: CanvasFlow = parsed.data
+        const nodeChanges: NodeChange<CanvasNode>[] = savedCanvas.nodes.map((node) => ({
+          type: 'add',
+          item: node,
+        }))
+        const edgeChanges: EdgeChange<CanvasEdge>[] = savedCanvas.edges.map((edge) => ({
+          type: 'add',
+          item: edge,
+        }))
+
+        history.pause()
+        try {
+          onNodesChange(nodeChanges)
+          onEdgesChange(edgeChanges)
+        } finally {
+          history.resume()
+        }
+
+        if (savedCanvas.nodes.length > 0) {
+          globalThis.requestAnimationFrame(() => {
+            reactFlow.fitView({ padding: 0.18, duration: 300 })
+          })
+        }
+      } catch (error) {
+        console.error('Saved canvas load failed.', error)
+      } finally {
+        if (!cancelled) {
+          setIsSavedCanvasLoading(false)
+        }
+      }
+    }
+
+    void loadSavedCanvas()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasExistingCanvas, history, onEdgesChange, onNodesChange, projectId, reactFlow])
 
   useEffect(() => {
     if (!templateImportRequest) {
@@ -373,6 +422,24 @@ function FlowCanvasInner({ templateImportRequest }: FlowCanvasProps): ReactEleme
     onDelete({ nodes: selectedNodes, edges: edgesToDelete })
   }, [reactFlow, edges, onDelete])
 
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      updateMyPresence({
+        cursor: reactFlow.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        }),
+      })
+    },
+    [reactFlow, updateMyPresence]
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    updateMyPresence({
+      cursor: null,
+    })
+  }, [updateMyPresence])
+
   useKeyboardShortcuts({
     zoomIn: handleZoomIn,
     zoomOut: handleZoomOut,
@@ -471,6 +538,24 @@ function FlowCanvasInner({ templateImportRequest }: FlowCanvasProps): ReactEleme
     [handleLabelChange, handleColorChange, handleResize]
   )
 
+  useEffect(() => handleMouseLeave, [handleMouseLeave])
+
+  useEffect(() => {
+    onSaveStatusChange?.(autosave.status)
+  }, [autosave.status, onSaveStatusChange])
+
+  useEffect(() => {
+    onSaveErrorMessageChange?.(autosave.errorMessage)
+  }, [autosave.errorMessage, onSaveErrorMessageChange])
+
+  useEffect(() => {
+    onSaveNowChange?.(autosave.saveNow)
+
+    return () => {
+      onSaveNowChange?.(null)
+    }
+  }, [autosave.saveNow, onSaveNowChange])
+
   return (
     <div className="h-full w-full">
       <NodeEditingContext.Provider value={nodeEditingContextValue}>
@@ -489,9 +574,12 @@ function FlowCanvasInner({ templateImportRequest }: FlowCanvasProps): ReactEleme
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onEdgesChange={onEdgesChange}
+          onMouseLeave={handleMouseLeave}
+          onMouseMove={handleMouseMove}
           onNodesChange={onNodesChange}
         >
           <Background {...flowBackgroundProps} />
+          <PresenceOverlay />
           <Panel position="bottom-center" className="bottom-6!">
             <div className="flex items-center gap-3">
               <CanvasControls

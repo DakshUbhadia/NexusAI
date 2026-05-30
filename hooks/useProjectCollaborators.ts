@@ -153,7 +153,13 @@ export function useProjectCollaborators(
       return
     }
 
-    void refresh()
+    const timeoutId = globalThis.setTimeout(() => {
+      void refresh()
+    }, 0)
+
+    return () => {
+      globalThis.clearTimeout(timeoutId)
+    }
   }, [enabled, refresh])
 
   return {

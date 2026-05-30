@@ -2,15 +2,17 @@
 
 import { useState } from 'react'
 
-import { UserButton } from '@clerk/nextjs'
 import {
+  AlertCircle,
+  CheckCircle2,
+  LoaderCircle,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Save,
   LayoutTemplate,
   Share2,
-  Sparkles,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -19,15 +21,16 @@ import {
   DeleteProjectDialog,
   RenameProjectDialog,
 } from '@/components/editor/project-dialogs'
+import { AiSidebar } from '@/components/editor/ai-sidebar'
 import { CollaborativeCanvas } from '@/components/editor/canvas/collaborative-canvas'
 import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
 import { Button } from '@/components/ui/button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
-import { cn } from '@/lib/utils'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
+import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplate, CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
 interface WorkspaceShellProps extends EditorProjectLists {
@@ -43,12 +46,31 @@ function findOwnedProject(projectId: string | undefined, ownedProjects: readonly
   return ownedProjects.find((project) => project.id === projectId)
 }
 
+function getSaveButtonLabel(status: CanvasSaveStatus, errorMessage: string | null): string {
+  if (status === 'saving') {
+    return 'Saving'
+  }
+
+  if (status === 'saved') {
+    return 'Saved'
+  }
+
+  if (status === 'error') {
+    return errorMessage ?? 'Save error'
+  }
+
+  return 'Save'
+}
+
 export function WorkspaceShell(props: WorkspaceShellProps) {
   const { currentRoomId, projectName, ownedProjects, sharedProjects } = props
   const router = useRouter()
   const projectActions = useProjectActions({ activeProjectId: currentRoomId })
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false)
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
+  const [canvasSaveNow, setCanvasSaveNow] = useState<(() => Promise<void>) | null>(null)
+  const [canvasSaveErrorMessage, setCanvasSaveErrorMessage] = useState<string | null>(null)
+  const [canvasSaveStatus, setCanvasSaveStatus] = useState<CanvasSaveStatus>('idle')
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [templateImportRequest, setTemplateImportRequest] =
@@ -95,6 +117,29 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              className="gap-2"
+              disabled={!canvasSaveNow || canvasSaveStatus === 'saving'}
+              onClick={() => {
+                void canvasSaveNow?.()
+              }}
+              title={canvasSaveErrorMessage ?? undefined}
+              type="button"
+              variant="outline"
+            >
+              {canvasSaveStatus === 'saving' ? (
+                <LoaderCircle className="size-4 animate-spin text-(--accent-primary)" />
+              ) : canvasSaveStatus === 'saved' ? (
+                <CheckCircle2 className="size-4 text-(--state-success)" />
+              ) : canvasSaveStatus === 'error' ? (
+                <AlertCircle className="size-4 text-(--state-error)" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              <span className="max-w-64 truncate">
+                {getSaveButtonLabel(canvasSaveStatus, canvasSaveErrorMessage)}
+              </span>
+            </Button>
             <Button className="gap-2" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
               <LayoutTemplate className="size-4" />
               Templates
@@ -112,14 +157,6 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               {aiSidebarOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
               AI Panel
             </Button>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: 'h-8 w-8',
-                  userButtonPopoverCard: 'border border-(--border-default)',
-                },
-              }}
-            />
           </div>
         </nav>
 
@@ -143,49 +180,14 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
 
             <section className="relative flex min-w-0 flex-1 overflow-hidden bg-(--bg-base)">
               <CollaborativeCanvas
+                onSaveErrorMessageChange={setCanvasSaveErrorMessage}
+                onSaveNowChange={(saveNow) => setCanvasSaveNow(() => saveNow)}
+                onSaveStatusChange={setCanvasSaveStatus}
                 roomId={currentRoomId}
                 templateImportRequest={templateImportRequest}
               />
             </section>
-
-            <aside
-              className={cn(
-                'h-full w-(--panel-width) shrink-0 border-l border-(--border-default) bg-(--bg-overlay) backdrop-blur-xl',
-                aiSidebarOpen ? 'block' : 'hidden'
-              )}
-            >
-              <div className="flex h-full flex-col">
-                <div className="flex items-center justify-between border-b border-(--border-default) bg-[linear-gradient(90deg,var(--accent-purple-muted),transparent)] px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-(--text-primary)">AI Copilot</p>
-                    <p className="text-xs text-(--text-muted)">Placeholder panel</p>
-                  </div>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface)">
-                    <Sparkles className="size-4 text-(--accent-primary)" />
-                  </div>
-                </div>
-                <div className="flex flex-1 flex-col gap-4 px-4 py-4">
-                  <div className="rounded-lg border border-(--border-default) bg-(--bg-surface) p-4 shadow-(--shadow-md)">
-                    <p className="text-sm font-semibold text-(--text-primary)">Chat surface pending</p>
-                    <p className="mt-2 text-xs leading-relaxed text-(--text-secondary)">
-                      The toggle is wired. Messaging and generation are intentionally out of scope here.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-(--border-default) bg-(--bg-base) p-4">
-                    <p className="text-xs font-semibold tracking-[0.18em] text-(--text-muted)">FUTURE HOOKS</p>
-                    <p className="mt-2 text-xs leading-relaxed text-(--text-secondary)">
-                      Prompt composer, run status, and architecture guidance will attach to this sidebar.
-                    </p>
-                  </div>
-                  <div className="mt-auto rounded-lg border border-(--border-default) bg-(--bg-surface-elevated) p-3">
-                    <p className="text-xs text-(--text-muted)">No active run</p>
-                    <div className="mt-3 h-1.5 rounded-full bg-(--bg-subtle)">
-                      <div className="h-full w-1/3 rounded-full bg-(--accent-secondary)" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </aside>
+            <AiSidebar onOpenChange={setAiSidebarOpen} open={aiSidebarOpen} />
           </div>
         </main>
       </div>

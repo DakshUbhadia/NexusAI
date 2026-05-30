@@ -19,7 +19,7 @@ export function LiveblocksRoomProvider({
         id={roomId}
         initialPresence={{
           cursor: null,
-          isThinking: false,
+          thinking: false,
         }}
       >
         {children}

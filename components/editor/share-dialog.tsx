@@ -40,11 +40,14 @@ export function ShareDialog({ open, onOpenChange, projectId, projectName, isOwne
   const { collaborators, viewerRole, isLoading, isMutating, error, invite, remove } =
     useProjectCollaborators({ projectId, enabled: open })
   const [inviteEmail, setInviteEmail] = useState('')
-  const [shareUrl, setShareUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const canManage = isOwner && viewerRole !== 'collaborator'
+  const shareUrl = useMemo(() => {
+    const origin = globalThis.location?.origin
+    return origin ? `${origin}/editor/${projectId}` : ''
+  }, [projectId])
   const emptyState = useMemo(() => {
     if (isLoading) {
       return 'Loading collaborators...'
@@ -56,18 +59,6 @@ export function ShareDialog({ open, onOpenChange, projectId, projectName, isOwne
 
     return 'No collaborators yet.'
   }, [error, isLoading])
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    const origin = globalThis.location?.origin
-
-    if (origin) {
-      setShareUrl(`${origin}/editor/${projectId}`)
-    }
-  }, [open, projectId])
 
   useEffect(() => {
     return () => {
@@ -196,9 +187,11 @@ export function ShareDialog({ open, onOpenChange, projectId, projectName, isOwne
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         {collaborator.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             alt={collaborator.displayName || collaborator.email}
                             className="h-9 w-9 rounded-full border border-(--border-default) object-cover"
+                            draggable={false}
                             src={collaborator.avatarUrl}
                           />
                         ) : (
