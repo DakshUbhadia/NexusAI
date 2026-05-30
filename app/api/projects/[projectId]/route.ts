@@ -1,55 +1,84 @@
-import { NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 
-export async function PATCH(req: Request, context: any) {
-  const { userId } = await auth()
+import prisma from '@/lib/prisma'
 
-  if (!userId) {
-    return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 })
-  }
-
-  const params = await Promise.resolve(context.params)
-  const projectId = params.projectId
-
-  const prisma = (await import("../../../../lib/prisma")).default
-  const project = await prisma.project.findUnique({ where: { id: projectId } })
-  if (!project) {
-    return new Response(JSON.stringify({ message: "Not found" }), { status: 404 })
-  }
-
-  if (project.ownerId !== userId) {
-    return new Response(JSON.stringify({ message: "Forbidden" }), { status: 403 })
-  }
-
-  const body = await req.json().catch(() => ({}))
-  const name = body?.name
-  if (!name) {
-    return new Response(JSON.stringify({ message: "Bad Request" }), { status: 400 })
-  }
-
-  const updated = await prisma.project.update({ where: { id: projectId }, data: { name } })
-
-  return NextResponse.json(updated)
+type RouteContext = {
+  params: Promise<{
+    projectId: string
+  }>
 }
 
-export async function DELETE(_req: Request, context: any) {
-  const { userId } = await auth()
+const patchProjectSchema = z.object({
+  name: z.string().trim().min(1),
+})
 
-  if (!userId) {
-    return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 })
-  }
+function errorResponse(message: string, code: string, status: number): Response {
+  return NextResponse.json({ error: { message, code } }, { status })
+}
 
-  const params = await Promise.resolve(context.params)
-  const projectId = params.projectId
+async function requireOwnedProject(projectId: string, userId: string): Promise<Response | null> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      ownerId: true,
+    },
+  })
 
-  const prisma = (await import("../../../../lib/prisma")).default
-  const project = await prisma.project.findUnique({ where: { id: projectId } })
   if (!project) {
-    return new Response(JSON.stringify({ message: "Not found" }), { status: 404 })
+    return errorResponse('Project not found.', 'not_found', 404)
   }
 
   if (project.ownerId !== userId) {
-    return new Response(JSON.stringify({ message: "Forbidden" }), { status: 403 })
+    return errorResponse('Access denied.', 'forbidden', 403)
+  }
+
+  return null
+}
+
+export async function PATCH(req: Request, context: RouteContext): Promise<Response> {
+  const { userId } = await auth()
+
+  if (!userId) {
+    return errorResponse('Authentication required.', 'unauthorized', 401)
+  }
+
+  const { projectId } = await context.params
+  const accessError = await requireOwnedProject(projectId, userId)
+
+  if (accessError) {
+    return accessError
+  }
+
+  const payload = (await req.json().catch(() => null)) as unknown
+  const parsed = patchProjectSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    return errorResponse('Project payload is invalid.', 'bad_request', 400)
+  }
+
+  const updated = await prisma.project.update({
+    where: { id: projectId },
+    data: { name: parsed.data.name },
+  })
+
+  return NextResponse.json({ data: updated })
+}
+
+export async function DELETE(_req: Request, context: RouteContext): Promise<Response> {
+  const { userId } = await auth()
+
+  if (!userId) {
+    return errorResponse('Authentication required.', 'unauthorized', 401)
+  }
+
+  const { projectId } = await context.params
+  const accessError = await requireOwnedProject(projectId, userId)
+
+  if (accessError) {
+    return accessError
   }
 
   await prisma.project.delete({ where: { id: projectId } })

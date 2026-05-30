@@ -10,6 +10,7 @@ import { CanvasError } from '@/components/editor/canvas/canvas-error'
 import { CanvasLoading } from '@/components/editor/canvas/canvas-loading'
 import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
 import type { CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
+import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 
 const FlowCanvas = dynamic(() => import('./flow/flow-canvas').then((mod) => mod.FlowCanvas), {
   ssr: false,
@@ -18,6 +19,9 @@ const FlowCanvas = dynamic(() => import('./flow/flow-canvas').then((mod) => mod.
 interface CollaborativeCanvasProps {
   readonly roomId: string
   readonly templateImportRequest?: CanvasTemplateImportRequest | null
+  readonly onSaveNowChange?: (saveNow: (() => Promise<void>) | null) => void
+  readonly onSaveErrorMessageChange?: (message: string | null) => void
+  readonly onSaveStatusChange?: (status: CanvasSaveStatus) => void
 }
 
 interface CanvasErrorBoundaryProps {
@@ -53,6 +57,9 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, CanvasErro
 
 export function CollaborativeCanvas({
   roomId,
+  onSaveErrorMessageChange,
+  onSaveNowChange,
+  onSaveStatusChange,
   templateImportRequest = null,
 }: CollaborativeCanvasProps): ReactElement {
   const [retryKey, setRetryKey] = useState(0)
@@ -66,7 +73,13 @@ export function CollaborativeCanvas({
       <CanvasErrorBoundary onRetry={handleRetry}>
         <LiveblocksRoomProvider key={retryKey} roomId={roomId}>
           <ClientSideSuspense fallback={<CanvasLoading />}>
-            <FlowCanvas templateImportRequest={templateImportRequest} />
+            <FlowCanvas
+              onSaveErrorMessageChange={onSaveErrorMessageChange}
+              onSaveNowChange={onSaveNowChange}
+              onSaveStatusChange={onSaveStatusChange}
+              projectId={roomId}
+              templateImportRequest={templateImportRequest}
+            />
           </ClientSideSuspense>
         </LiveblocksRoomProvider>
       </CanvasErrorBoundary>

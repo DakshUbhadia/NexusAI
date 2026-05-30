@@ -13,7 +13,7 @@ export function DialogPattern(
   // keep props typed as readonly to satisfy lint rules
   props: Readonly<DialogPatternProps>
 ) {
-  const { open, onOpenChange, className, children, ...propsRest } = props
+  const { className, children, ...propsRest } = props
   return (
     <div
       className={cn(
