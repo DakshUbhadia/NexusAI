@@ -20,6 +20,7 @@ type CollaboratorCursor = {
   connectionId: number
   name: string
   color: string
+  thinking: boolean
   cursor: {
     x: number
     y: number
@@ -60,6 +61,13 @@ export function PresenceOverlay(): ReactElement {
   const { isLoaded, userId } = useAuth()
   const others = useOthers()
   const [panX, panY, zoom] = useStore((state) => state.transform)
+  const thinkingByUserId = useMemo(() => {
+    const map = new Map<string, boolean>()
+    for (const other of others) {
+      map.set(other.id, other.presence.thinking)
+    }
+    return map
+  }, [others])
 
   const collaboratorAvatars = useMemo<CollaboratorAvatar[]>(() => {
     if (!isLoaded || !userId) {
@@ -99,6 +107,7 @@ export function PresenceOverlay(): ReactElement {
           connectionId: other.connectionId,
           name: getDisplayName(other.info.name, other.id),
           color: getAvatarColor(other.info.color),
+          thinking: other.presence.thinking,
           cursor: other.presence.cursor,
         },
       ]
@@ -124,7 +133,9 @@ export function PresenceOverlay(): ReactElement {
                   return (
                     <div
                       aria-hidden="true"
-                      className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border text-xs font-semibold text-(--text-inverted) ring-2 ring-(--bg-base)"
+                      className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border text-xs font-semibold text-(--text-inverted) ring-2 ring-(--bg-base) ${
+                        thinkingByUserId.get(collaborator.id) ? 'shadow-(--shadow-glow-cyan)' : ''
+                      }`}
                       key={collaborator.id}
                       style={avatarStyle}
                     >
@@ -139,6 +150,9 @@ export function PresenceOverlay(): ReactElement {
                       ) : (
                         <span>{getInitials(collaborator.name)}</span>
                       )}
+                      {thinkingByUserId.get(collaborator.id) ? (
+                        <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-(--bg-base) bg-(--accent-secondary)" />
+                      ) : null}
                     </div>
                   )
                 })}
@@ -194,7 +208,7 @@ export function PresenceOverlay(): ReactElement {
                   className="max-w-40 truncate rounded-full border px-2 py-1 text-xs font-medium text-(--text-inverted) shadow-(--shadow-sm)"
                   style={badgeStyle}
                 >
-                  {cursor.name}
+                  {cursor.thinking ? `${cursor.name} • thinking` : cursor.name}
                 </div>
               </div>
             </div>

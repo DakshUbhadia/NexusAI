@@ -18,6 +18,8 @@ const starterPrompts = [
 type AiSidebarProps = {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
+  readonly projectId: string
+  readonly roomId: string
 }
 
 type ChatMessage = {
@@ -30,9 +32,10 @@ function createMessageId(): string {
   return `message-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function AiSidebar({ open, onOpenChange }: AiSidebarProps): ReactElement {
+export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarProps): ReactElement {
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const resizeTextarea = useCallback(() => {
@@ -65,10 +68,21 @@ export function AiSidebar({ open, onOpenChange }: AiSidebarProps): ReactElement 
     [resizeTextarea]
   )
 
+  const appendAssistantMessage = useCallback((content: string): void => {
+    setMessages((current) => [
+      ...current,
+      {
+        id: createMessageId(),
+        role: 'assistant',
+        content,
+      },
+    ])
+  }, [])
+
   const handleSubmit = useCallback(() => {
     const trimmedPrompt = prompt.trim()
 
-    if (!trimmedPrompt) {
+    if (!trimmedPrompt || isSubmitting) {
       return
     }
 
@@ -82,7 +96,50 @@ export function AiSidebar({ open, onOpenChange }: AiSidebarProps): ReactElement 
     ])
     setPrompt('')
     globalThis.requestAnimationFrame(resizeTextarea)
-  }, [prompt, resizeTextarea])
+    setIsSubmitting(true)
+
+    const requestBody = {
+      prompt: trimmedPrompt,
+      roomId,
+      projectId,
+    }
+
+    void fetch('/api/ai/design', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data?: {
+                runId?: string
+              }
+              error?: {
+                message?: string
+              }
+            }
+          | null
+
+        if (!response.ok) {
+          const message = payload?.error?.message ?? 'Failed to start AI design task.'
+          appendAssistantMessage(`I couldn't start the design run: ${message}`)
+          return
+        }
+
+        const runId = payload?.data?.runId ?? 'unknown'
+        appendAssistantMessage(`Design run started. Run ID: ${runId}`)
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to trigger design task from AI sidebar.', error)
+        appendAssistantMessage('I could not reach the server. Please try again.')
+      })
+      .finally(() => {
+        setIsSubmitting(false)
+      })
+  }, [appendAssistantMessage, isSubmitting, projectId, prompt, resizeTextarea, roomId])
 
   const handlePromptKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -201,7 +258,7 @@ export function AiSidebar({ open, onOpenChange }: AiSidebarProps): ReactElement 
                 <Button
                   aria-label="Send prompt"
                   className="h-10 w-10 shrink-0 bg-(--accent-primary) text-(--text-primary) hover:bg-(--accent-primary-hover)"
-                  disabled={!prompt.trim()}
+                  disabled={!prompt.trim() || isSubmitting}
                   onClick={handleSubmit}
                   size="icon"
                   type="button"
