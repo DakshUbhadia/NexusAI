@@ -1,8 +1,9 @@
-import type {
-  CanvasEdge,
-  CanvasNode,
-  CanvasNodeColorKey,
-  CanvasNodeShape,
+import {
+  getCanvasNodeSize,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasNodeColorKey,
+  type CanvasNodeShape,
 } from '@/types/canvas'
 
 type TemplateCategory = 'Architecture' | 'Delivery' | 'Messaging'
@@ -29,14 +30,13 @@ type NodeOptions = {
   color: CanvasNodeColorKey
   x: number
   y: number
-  width: number
-  height: number
 }
 
 type HandleSide = 'top' | 'right' | 'bottom' | 'left'
 
 function templateNode(options: NodeOptions): CanvasNode {
-  const { id, label, shape, color, x, y, width, height } = options
+  const { id, label, shape, color, x, y } = options
+  const size = getCanvasNodeSize(shape)
 
   return {
     id,
@@ -46,7 +46,7 @@ function templateNode(options: NodeOptions): CanvasNode {
       label,
       color,
       shape,
-      size: { width, height },
+      size,
     },
   }
 }
@@ -81,8 +81,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 0,
         y: 190,
-        width: 190,
-        height: 82,
       }),
       templateNode({
         id: 'ms-gateway',
@@ -91,8 +89,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 290,
         y: 172,
-        width: 210,
-        height: 116,
       }),
       templateNode({
         id: 'ms-auth',
@@ -101,8 +97,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 640,
         y: 40,
-        width: 210,
-        height: 92,
       }),
       templateNode({
         id: 'ms-orders',
@@ -111,8 +105,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 640,
         y: 184,
-        width: 230,
-        height: 96,
       }),
       templateNode({
         id: 'ms-billing',
@@ -121,8 +113,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 640,
         y: 330,
-        width: 220,
-        height: 92,
       }),
       templateNode({
         id: 'ms-cache',
@@ -131,8 +121,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'warning',
         x: 1020,
         y: 36,
-        width: 130,
-        height: 130,
       }),
       templateNode({
         id: 'ms-db',
@@ -141,8 +129,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'success',
         x: 1010,
         y: 222,
-        width: 170,
-        height: 154,
       }),
       templateNode({
         id: 'ms-queue',
@@ -151,8 +137,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 1000,
         y: 430,
-        width: 180,
-        height: 148,
       }),
     ],
     edges: [
@@ -179,8 +163,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 0,
         y: 174,
-        width: 170,
-        height: 76,
       }),
       templateNode({
         id: 'ci-trigger',
@@ -189,8 +171,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 260,
         y: 146,
-        width: 170,
-        height: 132,
       }),
       templateNode({
         id: 'ci-build',
@@ -199,8 +179,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 520,
         y: 52,
-        width: 180,
-        height: 86,
       }),
       templateNode({
         id: 'ci-test',
@@ -209,8 +187,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'success',
         x: 520,
         y: 284,
-        width: 190,
-        height: 86,
       }),
       templateNode({
         id: 'ci-artifact',
@@ -219,8 +195,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'warning',
         x: 820,
         y: 134,
-        width: 190,
-        height: 150,
       }),
       templateNode({
         id: 'ci-deploy',
@@ -229,8 +203,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 1110,
         y: 144,
-        width: 190,
-        height: 118,
       }),
       templateNode({
         id: 'ci-prod',
@@ -239,8 +211,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'success',
         x: 1400,
         y: 126,
-        width: 150,
-        height: 150,
       }),
     ],
     edges: [
@@ -266,8 +236,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 0,
         y: 150,
-        width: 190,
-        height: 112,
       }),
       templateNode({
         id: 'ev-producer-a',
@@ -276,8 +244,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 310,
         y: 40,
-        width: 190,
-        height: 86,
       }),
       templateNode({
         id: 'ev-producer-b',
@@ -286,8 +252,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 310,
         y: 274,
-        width: 200,
-        height: 86,
       }),
       templateNode({
         id: 'ev-broker',
@@ -296,8 +260,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'cyan',
         x: 690,
         y: 128,
-        width: 210,
-        height: 166,
       }),
       templateNode({
         id: 'ev-worker',
@@ -306,8 +268,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'warning',
         x: 1080,
         y: 20,
-        width: 230,
-        height: 92,
       }),
       templateNode({
         id: 'ev-read-model',
@@ -316,8 +276,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'success',
         x: 1100,
         y: 180,
-        width: 190,
-        height: 150,
       }),
       templateNode({
         id: 'ev-notifications',
@@ -326,8 +284,6 @@ export const CANVAS_TEMPLATES: CanvasTemplate[] = [
         color: 'violet',
         x: 1080,
         y: 406,
-        width: 220,
-        height: 82,
       }),
     ],
     edges: [

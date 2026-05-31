@@ -12,6 +12,13 @@
 .agents/
 context/
 AGENTS.md
+CLAUDE.md
+GEMINI.md
+.gemini
+.trigger
+.claude
+.github
+.vscode
 # testing
 /coverage
 

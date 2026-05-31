@@ -3,58 +3,49 @@
 import type { DragEvent } from 'react'
 
 import { cn } from '@/lib/utils'
-import type { CanvasNodeShape, CanvasNodeSize } from '@/types/canvas'
+import type { CanvasNodeShape } from '@/types/canvas'
 
 export const SHAPE_DRAG_MIME = 'application/x-nexus-shape'
 
 export type ShapeDragPayload = {
   shape: CanvasNodeShape
-  size: CanvasNodeSize
 }
 
 type ShapeConfig = {
   shape: CanvasNodeShape
   label: string
-  size: CanvasNodeSize
 }
 
 const SHAPES: ShapeConfig[] = [
   {
     shape: 'rectangle',
     label: 'Rectangle',
-    size: { width: 360, height: 180 },
   },
   {
     shape: 'diamond',
     label: 'Diamond',
-    size: { width: 360, height: 280 },
   },
   {
     shape: 'circle',
     label: 'Circle',
-    size: { width: 260, height: 260 },
   },
   {
     shape: 'pill',
     label: 'Pill',
-    size: { width: 420, height: 180 },
   },
   {
     shape: 'cylinder',
     label: 'Cylinder',
-    size: { width: 280, height: 180 },
   },
   {
     shape: 'hexagon',
     label: 'Hexagon',
-    size: { width: 320, height: 220 },
   },
 ]
 
 function buildPayload(config: ShapeConfig): ShapeDragPayload {
   return {
     shape: config.shape,
-    size: config.size,
   }
 }
 

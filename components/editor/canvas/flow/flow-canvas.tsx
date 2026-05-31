@@ -9,18 +9,39 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  ViewportPortal,
   type ReactFlowInstance,
   useReactFlow,
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import { useCanRedo, useCanUndo, useHistory, useRedo, useUndo, useUpdateMyPresence } from '@liveblocks/react'
+import { Check, PencilLine, Trash2, X } from 'lucide-react'
+import {
+  useCanRedo,
+  useCanUndo,
+  useEventListener,
+  useHistory,
+  useRedo,
+  useUndo,
+  useUpdateMyPresence,
+} from '@liveblocks/react'
 import { useLiveblocksFlow } from '@liveblocks/react-flow'
 
+import { CanvasEdgeRenderer } from '@/components/editor/canvas/edges/canvas-edge'
 import { CanvasNodeRenderer } from '@/components/editor/canvas/nodes/canvas-node'
 import { ShapePanel, SHAPE_DRAG_MIME, type ShapeDragPayload } from '@/components/editor/canvas/shape-panel'
-import type { CanvasEdge, CanvasNode, CanvasNodeColorKey, CanvasNodeShape } from '@/types/canvas'
-import { DEFAULT_NODE_COLOR_KEY } from '@/types/canvas'
+import { cn } from '@/lib/utils'
+import {
+  DEFAULT_NODE_COLOR_KEY,
+  getCanvasNodeSize,
+  canvasFlowSchema,
+  type CanvasFlow,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasNodeColorKey,
+  type CanvasNodeShape,
+  type CanvasNodeSize,
+} from '@/types/canvas'
 
 import { flowBackgroundProps } from './flow-config'
 import { NodeEditingContext } from './node-editing-context'
@@ -29,7 +50,6 @@ import CanvasControls from '@/components/editor/canvas/controls/canvas-controls'
 import useKeyboardShortcuts from '@/hooks/useKeyboardShortcuts'
 import { useCanvasAutosave, type CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
-import { canvasFlowSchema, type CanvasFlow } from '@/types/canvas'
 
 const DEFAULT_NODE_COLOR: CanvasNodeColorKey = DEFAULT_NODE_COLOR_KEY
 const SHAPE_VALUES: ReadonlySet<CanvasNodeShape> = new Set([
@@ -47,6 +67,35 @@ type FlowCanvasProps = {
   readonly onSaveNowChange?: (saveNow: (() => Promise<void>) | null) => void
   readonly onSaveErrorMessageChange?: (message: string | null) => void
   readonly onSaveStatusChange?: (status: CanvasSaveStatus) => void
+}
+
+type DragPreviewState = {
+  readonly isValid: boolean
+  readonly position: {
+    readonly x: number
+    readonly y: number
+  }
+  readonly shape: CanvasNodeShape
+  readonly size: CanvasNodeSize
+}
+
+type EdgeActionMenuState = {
+  readonly edgeId: string
+  readonly x: number
+  readonly y: number
+}
+
+type EdgeLabelEditorState = EdgeActionMenuState & {
+  readonly draft: string
+}
+
+type AiStatusItem = {
+  readonly id: string
+  readonly phase: 'start' | 'processing' | 'complete' | 'error'
+  readonly message: string
+  readonly runId: string
+  readonly step: number
+  readonly totalSteps: number
 }
 
 function cloneTemplateNode(node: CanvasNode): CanvasNode {
@@ -90,26 +139,32 @@ function parseShapePayload(raw: string): ShapeDragPayload | null {
     }
 
     const shape = (parsed as { shape?: unknown }).shape
-    const size = (parsed as { size?: unknown }).size
-    if (!isShapeValue(shape) || !size || typeof size !== 'object') {
-      return null
-    }
-
-    const width = (size as { width?: unknown }).width
-    const height = (size as { height?: unknown }).height
-    if (typeof width !== 'number' || typeof height !== 'number') {
+    if (!isShapeValue(shape)) {
       return null
     }
 
     return {
       shape,
-      size: {
-        width,
-        height,
-      },
     }
   } catch {
     return null
+  }
+}
+
+function getPlacementPosition(
+  reactFlow: ReactFlowInstance<CanvasNode, CanvasEdge>,
+  clientX: number,
+  clientY: number,
+  size: CanvasNodeSize
+): { x: number; y: number } {
+  const flowPosition = reactFlow.screenToFlowPosition({
+    x: clientX,
+    y: clientY,
+  })
+
+  return {
+    x: Math.round(flowPosition.x - size.width / 2),
+    y: Math.round(flowPosition.y - size.height / 2),
   }
 }
 
@@ -130,9 +185,19 @@ function FlowCanvasInner({
   projectId,
   templateImportRequest,
 }: FlowCanvasProps): ReactElement {
-  const edgeTypes = useMemo(() => ({}), [])
+  const edgeTypes = useMemo(() => ({ canvasEdge: CanvasEdgeRenderer }), [])
   const typedNodeTypes = useMemo(() => ({ canvasNode: CanvasNodeRenderer }), [])
+  const canvasRootRef = useRef<HTMLDivElement | null>(null)
+  const edgeLabelInputRef = useRef<HTMLInputElement | null>(null)
+  const edgeActionMenuRef = useRef<HTMLDivElement | null>(null)
+  const edgeLabelEditorRef = useRef<HTMLDivElement | null>(null)
+  const edgeLabelEditorFocusRef = useRef<string | null>(null)
+  const edgeLabelCancelRef = useRef(false)
   const [isSavedCanvasLoading, setIsSavedCanvasLoading] = useState(true)
+  const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null)
+  const [edgeActionMenu, setEdgeActionMenu] = useState<EdgeActionMenuState | null>(null)
+  const [edgeLabelEditor, setEdgeLabelEditor] = useState<EdgeLabelEditorState | null>(null)
+  const [aiStatusFeed, setAiStatusFeed] = useState<AiStatusItem[]>([])
   const hasFitViewRef = useRef(false)
   const loadAttemptedRef = useRef(false)
   const lastTemplateImportRequestRef = useRef<number | null>(null)
@@ -180,15 +245,87 @@ function FlowCanvasInner({
     edges,
     enabled: hasExistingCanvas || !isSavedCanvasLoading,
   })
+  const activeEdgeActionMenu =
+    edgeActionMenu && edges.some((edge) => edge.id === edgeActionMenu.edgeId) ? edgeActionMenu : null
+  const activeEdgeLabelEditor =
+    edgeLabelEditor && edges.some((edge) => edge.id === edgeLabelEditor.edgeId) ? edgeLabelEditor : null
+  const latestStatus = aiStatusFeed[0] ?? null
+
+  useEventListener(({ event }) => {
+    if (event.type !== 'design-agent-status') {
+      return
+    }
+
+    setAiStatusFeed((current) => {
+      const nextItem: AiStatusItem = {
+        id: `${event.runId}:${event.step}:${event.timestamp}`,
+        phase: event.phase,
+        message: event.message,
+        runId: event.runId,
+        step: event.step,
+        totalSteps: event.totalSteps,
+      }
+
+      return [nextItem, ...current].slice(0, 6)
+    })
+  })
 
   useEffect(() => {
     latestEdgesRef.current = edges
     latestNodesRef.current = nodes
   }, [edges, nodes])
 
+  useEffect(() => {
+    if (!activeEdgeLabelEditor) {
+      edgeLabelEditorFocusRef.current = null
+    }
+  }, [activeEdgeLabelEditor])
+
+  const updateDragPreview = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const payload = parseShapePayload(event.dataTransfer.getData(SHAPE_DRAG_MIME))
+      if (!payload) {
+        setDragPreview(null)
+        return null
+      }
+
+      const size = getCanvasNodeSize(payload.shape)
+      const position = getPlacementPosition(reactFlow, event.clientX, event.clientY, size)
+
+      setDragPreview({
+        shape: payload.shape,
+        size,
+        position,
+        isValid: true,
+      })
+
+      return {
+        payload,
+        position,
+        size,
+      }
+    },
+    [reactFlow]
+  )
+
+  const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    updateDragPreview(event)
+  }, [updateDragPreview])
+
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
+    updateDragPreview(event)
+  }, [updateDragPreview])
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return
+    }
+
+    setDragPreview(null)
   }, [])
 
   const handleInit = useCallback((instance: ReactFlowInstance<CanvasNode, CanvasEdge>) => {
@@ -205,14 +342,14 @@ function FlowCanvasInner({
       event.preventDefault()
 
       const payload = parseShapePayload(event.dataTransfer.getData(SHAPE_DRAG_MIME))
+      setDragPreview(null)
+
       if (!payload) {
         return
       }
 
-      const position = reactFlow.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      })
+      const size = getCanvasNodeSize(payload.shape)
+      const position = getPlacementPosition(reactFlow, event.clientX, event.clientY, size)
 
       shapeCounter.current += 1
       const nodeId = `${payload.shape}-${Date.now()}-${shapeCounter.current}`
@@ -225,7 +362,7 @@ function FlowCanvasInner({
           label: '',
           color: DEFAULT_NODE_COLOR,
           shape: payload.shape,
-          size: payload.size,
+          size,
         },
       }
 
@@ -311,6 +448,213 @@ function FlowCanvasInner({
       cancelled = true
     }
   }, [hasExistingCanvas, history, onEdgesChange, onNodesChange, projectId, reactFlow])
+
+  useEffect(() => {
+    if (!activeEdgeActionMenu && !activeEdgeLabelEditor) {
+      return
+    }
+
+    const handleWindowPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (edgeActionMenuRef.current?.contains(target)) {
+        return
+      }
+
+      if (edgeLabelEditorRef.current?.contains(target)) {
+        return
+      }
+
+      setEdgeActionMenu(null)
+    }
+
+    const handleWindowKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      setEdgeActionMenu(null)
+      if (edgeLabelEditorRef.current) {
+        edgeLabelCancelRef.current = true
+        setEdgeLabelEditor(null)
+      }
+    }
+
+    globalThis.window.addEventListener('pointerdown', handleWindowPointerDown)
+    globalThis.window.addEventListener('keydown', handleWindowKeyDown)
+
+    return () => {
+      globalThis.window.removeEventListener('pointerdown', handleWindowPointerDown)
+      globalThis.window.removeEventListener('keydown', handleWindowKeyDown)
+    }
+  }, [activeEdgeActionMenu, activeEdgeLabelEditor])
+
+  useEffect(() => {
+    if (!activeEdgeLabelEditor) {
+      return
+    }
+
+    if (edgeLabelEditorFocusRef.current === activeEdgeLabelEditor.edgeId) {
+      return
+    }
+
+    edgeLabelEditorFocusRef.current = activeEdgeLabelEditor.edgeId
+    edgeLabelInputRef.current?.focus()
+  }, [activeEdgeLabelEditor])
+
+  const getOverlayPosition = useCallback((event: { clientX: number; clientY: number }): { x: number; y: number } => {
+    if (!canvasRootRef.current) {
+      return { x: 0, y: 0 }
+    }
+
+    const bounds = canvasRootRef.current.getBoundingClientRect()
+    return {
+      x: Math.round(event.clientX - bounds.left + 8),
+      y: Math.round(event.clientY - bounds.top + 8),
+    }
+  }, [])
+
+  const updateEdgeLabel = useCallback(
+    (edgeId: string, nextLabel: string) => {
+      const currentEdge = edges.find((edge) => edge.id === edgeId)
+      if (!currentEdge) {
+        return
+      }
+
+      const trimmedLabel = nextLabel.trim()
+      const nextData = currentEdge.data ? { ...currentEdge.data } : {}
+      if (trimmedLabel.length > 0) {
+        nextData.label = trimmedLabel
+      } else {
+        delete nextData.label
+      }
+
+      const updatedEdge: CanvasEdge = {
+        ...currentEdge,
+        data: Object.keys(nextData).length > 0 ? nextData : undefined,
+        label: trimmedLabel.length > 0 ? trimmedLabel : undefined,
+      }
+
+      const edgeChanges: EdgeChange<CanvasEdge>[] = [
+        {
+          type: 'replace',
+          id: currentEdge.id,
+          item: updatedEdge,
+        },
+      ]
+
+      onEdgesChange(edgeChanges)
+    },
+    [edges, onEdgesChange]
+  )
+
+  const handleEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: CanvasEdge) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      const position = getOverlayPosition(event)
+      setEdgeLabelEditor(null)
+      setEdgeActionMenu({
+        edgeId: edge.id,
+        x: position.x,
+        y: position.y,
+      })
+    },
+    [getOverlayPosition]
+  )
+
+  const handleEdgeAddText = useCallback(() => {
+    if (!activeEdgeActionMenu) {
+      return
+    }
+
+    const currentEdge = edges.find((edge) => edge.id === activeEdgeActionMenu.edgeId)
+    if (!currentEdge) {
+      setEdgeActionMenu(null)
+      return
+    }
+
+    setEdgeActionMenu(null)
+    edgeLabelCancelRef.current = false
+    setEdgeLabelEditor({
+      edgeId: currentEdge.id,
+      x: activeEdgeActionMenu.x,
+      y: activeEdgeActionMenu.y,
+      draft: currentEdge.data?.label ?? '',
+    })
+  }, [activeEdgeActionMenu, edges])
+
+  const handleEdgeDelete = useCallback(() => {
+    if (!activeEdgeActionMenu) {
+      return
+    }
+
+    const currentEdge = edges.find((edge) => edge.id === activeEdgeActionMenu.edgeId)
+    if (!currentEdge) {
+      setEdgeActionMenu(null)
+      return
+    }
+
+    setEdgeActionMenu(null)
+    setEdgeLabelEditor(null)
+    onDelete({ nodes: [], edges: [currentEdge] })
+  }, [activeEdgeActionMenu, edges, onDelete])
+
+  const handleEdgeEditorConfirm = useCallback(() => {
+    if (!activeEdgeLabelEditor) {
+      return
+    }
+
+    updateEdgeLabel(activeEdgeLabelEditor.edgeId, activeEdgeLabelEditor.draft)
+    edgeLabelCancelRef.current = false
+    setEdgeLabelEditor(null)
+  }, [activeEdgeLabelEditor, updateEdgeLabel])
+
+  const handleEdgeEditorCancel = useCallback(() => {
+    edgeLabelCancelRef.current = true
+    setEdgeLabelEditor(null)
+  }, [])
+
+  const handleEdgeEditorBlur = useCallback(() => {
+    if (!activeEdgeLabelEditor) {
+      return
+    }
+
+    if (edgeLabelCancelRef.current) {
+      edgeLabelCancelRef.current = false
+      setEdgeLabelEditor(null)
+      return
+    }
+
+    handleEdgeEditorConfirm()
+  }, [activeEdgeLabelEditor, handleEdgeEditorConfirm])
+
+  const handleEdgeEditorDraftChange = useCallback((nextDraft: string) => {
+    setEdgeLabelEditor((current) => (current ? { ...current, draft: nextDraft } : current))
+  }, [])
+
+  const renderedEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const label = edge.data?.label?.trim() ?? ''
+        return {
+          ...edge,
+          type: 'canvasEdge',
+          label: label || undefined,
+          data: edge.data ? { ...edge.data, label: label || undefined } : edge.data,
+        } as CanvasEdge
+      }),
+    [edges]
+  )
+
+  const closeEdgeOverlays = useCallback(() => {
+    setEdgeActionMenu(null)
+    setEdgeLabelEditor(null)
+  }, [])
 
   useEffect(() => {
     if (!templateImportRequest) {
@@ -420,7 +764,8 @@ function FlowCanvasInner({
     const edgesToDelete = Array.from(edgesToDeleteById.values())
 
     onDelete({ nodes: selectedNodes, edges: edgesToDelete })
-  }, [reactFlow, edges, onDelete])
+    closeEdgeOverlays()
+  }, [closeEdgeOverlays, reactFlow, edges, onDelete])
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -557,7 +902,7 @@ function FlowCanvasInner({
   }, [autosave.saveNow, onSaveNowChange])
 
   return (
-    <div className="h-full w-full">
+    <div ref={canvasRootRef} className="relative h-full w-full">
       <NodeEditingContext.Provider value={nodeEditingContextValue}>
         <ReactFlow
           className="h-full w-full"
@@ -566,11 +911,16 @@ function FlowCanvasInner({
           defaultEdgeOptions={defaultEdgeOptions}
           nodeTypes={typedNodeTypes}
           nodes={nodes}
-          edges={edges}
+          edges={renderedEdges}
           proOptions={{ hideAttribution: true }}
           onInit={handleInit}
           onConnect={handleConnect}
           onDelete={onDelete}
+          onPaneClick={closeEdgeOverlays}
+          onNodeClick={closeEdgeOverlays}
+          onEdgeClick={handleEdgeClick}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onEdgesChange={onEdgesChange}
@@ -579,7 +929,61 @@ function FlowCanvasInner({
           onNodesChange={onNodesChange}
         >
           <Background {...flowBackgroundProps} />
+          {dragPreview ? (
+            <ViewportPortal>
+              <div
+                aria-hidden="true"
+                className={cn(
+                  'pointer-events-none absolute border-2 border-dashed bg-(--accent-primary-muted) opacity-45 transition-all duration-150',
+                  dragPreview.isValid ? 'border-(--border-accent)' : 'border-(--state-error) bg-(--state-error-muted)'
+                )}
+                style={{
+                  left: dragPreview.position.x,
+                  top: dragPreview.position.y,
+                  width: dragPreview.size.width,
+                  height: dragPreview.size.height,
+                }}
+              />
+            </ViewportPortal>
+          ) : null}
           <PresenceOverlay />
+          {latestStatus ? (
+            <Panel position="top-left" className="top-4! left-4! m-0! w-88">
+              <div className="pointer-events-auto rounded-xl border border-(--border-default) bg-(--bg-overlay) p-3 shadow-(--shadow-md) backdrop-blur-xl">
+                <p className="text-xs font-semibold text-(--text-primary)">AI Activity</p>
+                <p className="mt-1 text-xs text-(--text-secondary)">
+                  {latestStatus.message}
+                </p>
+                <div className="mt-2 max-h-28 space-y-1.5 overflow-y-auto pr-1">
+                  {aiStatusFeed.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start gap-2 rounded-md border border-(--border-subtle) bg-(--bg-surface-elevated) px-2 py-1.5"
+                    >
+                      <span
+                        className={cn(
+                          'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
+                          item.phase === 'complete'
+                            ? 'bg-(--state-success)'
+                            : item.phase === 'error'
+                              ? 'bg-(--state-error)'
+                              : item.phase === 'start'
+                                ? 'bg-(--accent-primary)'
+                                : 'bg-(--state-warning)'
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] text-(--text-primary)">{item.message}</p>
+                        <p className="text-[10px] text-(--text-muted)">
+                          {item.totalSteps > 0 ? `Step ${item.step}/${item.totalSteps}` : 'Preparing'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+          ) : null}
           <Panel position="bottom-center" className="bottom-6!">
             <div className="flex items-center gap-3">
               <CanvasControls
@@ -604,6 +1008,95 @@ function FlowCanvasInner({
           {/* Minimap removed per ergonomics spec */}
         </ReactFlow>
       </NodeEditingContext.Provider>
+      {activeEdgeActionMenu ? (
+        <div
+          ref={edgeActionMenuRef}
+          className="absolute z-50 min-w-36 rounded-lg border border-(--border-default) bg-(--bg-surface-elevated) p-1.5 shadow-(--shadow-lg)"
+          style={{
+            left: activeEdgeActionMenu.x,
+            top: activeEdgeActionMenu.y,
+          }}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-(--text-primary) transition-colors duration-150 hover:bg-(--bg-subtle)"
+            onClick={handleEdgeAddText}
+          >
+            <PencilLine className="h-4 w-4 text-(--text-secondary)" strokeWidth={1.5} />
+            Add text
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-(--state-error) transition-colors duration-150 hover:bg-(--state-error-muted)"
+            onClick={handleEdgeDelete}
+          >
+            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+            Delete
+          </button>
+        </div>
+      ) : null}
+      {activeEdgeLabelEditor ? (
+        <div
+          ref={edgeLabelEditorRef}
+          className="absolute z-50 flex items-center gap-1 rounded-xl border border-white/10 bg-(--bg-overlay)/95 p-2 shadow-(--shadow-lg) backdrop-blur-md"
+          style={{
+            left: activeEdgeLabelEditor.x,
+            top: activeEdgeLabelEditor.y,
+          }}
+          onKeyDownCapture={(event) => event.stopPropagation()}
+          onMouseDownCapture={(event) => event.stopPropagation()}
+          onPointerDownCapture={(event) => event.stopPropagation()}
+        >
+          <input
+            ref={edgeLabelInputRef}
+            type="text"
+            value={activeEdgeLabelEditor.draft}
+            onChange={(event) => handleEdgeEditorDraftChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                event.stopPropagation()
+                handleEdgeEditorConfirm()
+                return
+              }
+
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                edgeLabelCancelRef.current = true
+                setEdgeLabelEditor(null)
+              }
+            }}
+            onBlur={handleEdgeEditorBlur}
+            onKeyDownCapture={(event) => event.stopPropagation()}
+            onMouseDownCapture={(event) => event.stopPropagation()}
+            onPointerDownCapture={(event) => event.stopPropagation()}
+            placeholder="Edge text"
+            className="h-9 min-w-44 rounded-lg border border-white/10 bg-(--bg-surface-elevated) px-3 text-sm text-(--text-primary) outline-none placeholder:text-(--text-muted) focus:border-(--border-accent)"
+          />
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-(--text-secondary) transition-colors duration-150 hover:bg-(--bg-subtle) hover:text-(--text-primary)"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={handleEdgeEditorConfirm}
+            aria-label="Confirm edge text"
+          >
+            <Check className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-(--text-secondary) transition-colors duration-150 hover:bg-(--bg-subtle) hover:text-(--text-primary)"
+            onMouseDown={(event) => {
+              event.preventDefault()
+              edgeLabelCancelRef.current = true
+            }}
+            onClick={handleEdgeEditorCancel}
+            aria-label="Cancel edge text"
+          >
+            <X className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

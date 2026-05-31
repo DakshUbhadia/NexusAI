@@ -3,6 +3,15 @@ import { z } from 'zod'
 
 export type CanvasNodeShape = 'rectangle' | 'diamond' | 'circle' | 'pill' | 'cylinder' | 'hexagon'
 
+export const CANVAS_SHAPE_SIZE_MAP = {
+  rectangle: { width: 220, height: 92 },
+  diamond: { width: 190, height: 150 },
+  circle: { width: 140, height: 140 },
+  pill: { width: 200, height: 82 },
+  cylinder: { width: 180, height: 150 },
+  hexagon: { width: 200, height: 116 },
+} as const satisfies Record<CanvasNodeShape, { width: number; height: number }>
+
 export const CANVAS_COLOR_PALETTE = {
   cyan: {
     label: 'Cyan',
@@ -51,6 +60,14 @@ export type CanvasNodeSize = {
   height: number
 }
 
+export function getCanvasNodeSize(shape: CanvasNodeShape): CanvasNodeSize {
+  const size = CANVAS_SHAPE_SIZE_MAP[shape]
+  return {
+    width: size.width,
+    height: size.height,
+  }
+}
+
 export type CanvasNodeData = {
   label: string
   color: CanvasNodeColorKey
@@ -60,9 +77,12 @@ export type CanvasNodeData = {
 
 export type CanvasNodeType = 'canvasNode'
 export type CanvasEdgeType = 'canvasEdge'
+export type CanvasEdgeData = {
+  label?: string
+}
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>
-export type CanvasEdge = Edge<Record<string, never>, CanvasEdgeType>
+export type CanvasEdge = Edge<CanvasEdgeData, CanvasEdgeType>
 
 export type CanvasFlow = {
   nodes: CanvasNode[]
@@ -102,6 +122,12 @@ export const canvasEdgeSchema = z
     source: z.string().min(1),
     target: z.string().min(1),
     type: z.literal('canvasEdge').optional(),
+    label: z.string().optional(),
+    data: z
+      .object({
+        label: z.string().optional(),
+      })
+      .optional(),
   })
   .passthrough() as z.ZodType<CanvasEdge>
 

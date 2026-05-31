@@ -4,6 +4,16 @@ import type { LiveblocksFlow } from '@liveblocks/react-flow'
 
 import type { CanvasEdge, CanvasNode } from '@/types/canvas'
 
+type DesignAgentStatusEvent = {
+  type: 'design-agent-status'
+  phase: 'start' | 'processing' | 'complete' | 'error'
+  message: string
+  runId: string
+  step: number
+  totalSteps: number
+  timestamp: string
+}
+
 declare global {
   interface Liveblocks {
     Presence: {
@@ -21,7 +31,7 @@ declare global {
         color: string
       }
     }
-    RoomEvent: never
+    RoomEvent: DesignAgentStatusEvent
     ThreadMetadata: Record<string, never>
     RoomInfo: Record<string, never>
   }

@@ -187,7 +187,12 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
                 templateImportRequest={templateImportRequest}
               />
             </section>
-            <AiSidebar onOpenChange={setAiSidebarOpen} open={aiSidebarOpen} />
+            <AiSidebar
+              onOpenChange={setAiSidebarOpen}
+              open={aiSidebarOpen}
+              projectId={currentRoomId}
+              roomId={currentRoomId}
+            />
           </div>
         </main>
       </div>
