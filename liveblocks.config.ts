@@ -1,8 +1,7 @@
 // Define Liveblocks types for your application
 // https://liveblocks.io/docs/api-reference/liveblocks-react#Typing-your-data
-import type { LiveblocksFlow } from '@liveblocks/react-flow'
-
-import type { CanvasEdge, CanvasNode } from '@/types/canvas'
+import type { JsonObject } from '@liveblocks/client'
+import type { AiFeedMessage } from '@/types/tasks'
 
 type DesignAgentStatusEvent = {
   type: 'design-agent-status'
@@ -21,7 +20,10 @@ declare global {
       thinking: boolean
     }
     Storage: {
-      flow?: LiveblocksFlow<CanvasNode, CanvasEdge>
+      flow?: {
+        nodes: JsonObject[]
+        edges: JsonObject[]
+      }
     }
     UserMeta: {
       id: string
@@ -32,6 +34,10 @@ declare global {
       }
     }
     RoomEvent: DesignAgentStatusEvent
+    FeedMetadata: {
+      name?: string
+    }
+    FeedMessageData: AiFeedMessage
     ThreadMetadata: Record<string, never>
     RoomInfo: Record<string, never>
   }

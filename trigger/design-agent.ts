@@ -1,22 +1,23 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { NoObjectGeneratedError, generateObject, generateText } from "ai";
-import { schemaTask } from "@trigger.dev/sdk/v3";
+import { generateText, Output } from "ai";
+import { schemaTask } from "@trigger.dev/sdk";
 import { z } from "zod";
 
+import prisma from "../lib/prisma";
 import { liveblocks } from "../lib/liveblocks";
 import {
-  CANVAS_COLOR_PALETTE,
-  CANVAS_SHAPE_SIZE_MAP,
-  DEFAULT_NODE_COLOR_KEY,
+  AI_STATUS_FEED_ID,
+  aiStatusFeedMessageSchema,
+  type AiStatusFeedMessage,
+} from "../types/tasks";
+import {
   canvasFlowSchema,
-  canvasNodeColorKeySchema,
-  canvasNodeShapeSchema,
-  getCanvasNodeSize,
   type CanvasEdge,
   type CanvasFlow,
   type CanvasNode,
   type CanvasNodeColorKey,
   type CanvasNodeShape,
+  type CanvasNodeSize,
 } from "../types/canvas";
 
 const AI_AGENT_USER_ID = "nexus-ai-agent";
@@ -24,118 +25,15 @@ const AI_AGENT_NAME = "Nexus AI";
 const AI_AGENT_AVATAR = "";
 const AI_AGENT_COLOR = "var(--accent-secondary)";
 const AI_PRESENCE_TTL_SECONDS = 60;
-const STREAM_DELAY_MS = 280;
-const NODE_SPACING_X = 260;
-const NODE_SPACING_Y = 180;
-const MAX_LAYOUT_COLUMNS = 4;
-const MAX_ACTION_COUNT = 24;
+const AI_STATUS_TEXT_MAX_LENGTH = 140;
 
 const designAgentPayloadSchema = z.object({
   prompt: z.string().trim().min(1),
   roomId: z.string().trim().min(1),
+  projectId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
 });
 
-const positionSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-});
-
-const sizeSchema = z.object({
-  width: z.number().positive(),
-  height: z.number().positive(),
-});
-
-const addNodeActionSchema = z.object({
-  kind: z.literal("add_node"),
-  label: z.string().trim().min(1),
-  shape: canvasNodeShapeSchema.optional(),
-  color: canvasNodeColorKeySchema.optional(),
-  position: positionSchema.optional(),
-  size: sizeSchema.optional(),
-});
-
-const moveNodeActionSchema = z.object({
-  kind: z.literal("move_node"),
-  nodeId: z.string().trim().min(1),
-  position: positionSchema,
-});
-
-const resizeNodeActionSchema = z.object({
-  kind: z.literal("resize_node"),
-  nodeId: z.string().trim().min(1),
-  size: sizeSchema,
-});
-
-const updateNodeDataActionSchema = z.object({
-  kind: z.literal("update_node_data"),
-  nodeId: z.string().trim().min(1),
-  label: z.string().trim().min(1).optional(),
-  shape: canvasNodeShapeSchema.optional(),
-  color: canvasNodeColorKeySchema.optional(),
-  size: sizeSchema.optional(),
-});
-
-const deleteNodeActionSchema = z.object({
-  kind: z.literal("delete_node"),
-  nodeId: z.string().trim().min(1),
-});
-
-const addEdgeActionSchema = z.object({
-  kind: z.literal("add_edge"),
-  sourceId: z.string().trim().min(1).optional(),
-  sourceLabel: z.string().trim().min(1).optional(),
-  targetId: z.string().trim().min(1).optional(),
-  targetLabel: z.string().trim().min(1).optional(),
-  label: z.string().trim().min(1).optional(),
-}).superRefine((value, ctx) => {
-  if (!value.sourceId && !value.sourceLabel) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "add_edge requires sourceId or sourceLabel.",
-    });
-  }
-
-  if (!value.targetId && !value.targetLabel) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "add_edge requires targetId or targetLabel.",
-    });
-  }
-});
-
-const deleteEdgeActionSchema = z
-  .object({
-    kind: z.literal("delete_edge"),
-    edgeId: z.string().trim().min(1).optional(),
-    sourceId: z.string().trim().min(1).optional(),
-    targetId: z.string().trim().min(1).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.edgeId && !(value.sourceId && value.targetId)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "delete_edge requires edgeId or both sourceId and targetId.",
-      });
-    }
-  });
-
-const designActionSchema = z.discriminatedUnion("kind", [
-  addNodeActionSchema,
-  moveNodeActionSchema,
-  resizeNodeActionSchema,
-  updateNodeDataActionSchema,
-  deleteNodeActionSchema,
-  addEdgeActionSchema,
-  deleteEdgeActionSchema,
-]);
-
-const designPlanSchema = z.object({
-  summary: z.string().optional(),
-  actions: z.array(designActionSchema).min(1).max(MAX_ACTION_COUNT),
-});
-
-type DesignAction = z.infer<typeof designActionSchema>;
-type DesignPlan = z.infer<typeof designPlanSchema>;
 type DesignStatusPhase = "start" | "processing" | "complete" | "error";
 type DesignStatusEvent = {
   type: "design-agent-status";
@@ -147,100 +45,801 @@ type DesignStatusEvent = {
   timestamp: string;
 };
 
-type ApplyActionResult = {
-  changed: boolean;
-  message: string;
-  cursor: { x: number; y: number } | null;
+type LiveblocksApiError = {
+  message?: string;
+  status?: number;
 };
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+const ARCHITECTURE_LAYERS = [
+  {
+    id: "client",
+    label: "Client layer",
+    x: 120,
+    color: "success",
+  },
+  {
+    id: "frontend",
+    label: "Frontend / UI",
+    x: 430,
+    color: "cyan",
+  },
+  {
+    id: "backend",
+    label: "API / backend",
+    x: 740,
+    color: "warning",
+  },
+  {
+    id: "execution",
+    label: "Algorithm execution",
+    x: 1050,
+    color: "violet",
+  },
+  {
+    id: "visualization",
+    label: "Visualization",
+    x: 1360,
+    color: "cyan",
+  },
+  {
+    id: "data",
+    label: "Data layer",
+    x: 1670,
+    color: "violet",
+  },
+  {
+    id: "operations",
+    label: "Deployment / monitoring",
+    x: 1980,
+    color: "warning",
+  },
+] as const;
+
+type ArchitectureLayerId = (typeof ARCHITECTURE_LAYERS)[number]["id"];
+type LayoutTier = "main" | "support";
+type PromptScope = {
+  allowAiRuntime: boolean;
+  allowAsyncJobs: boolean;
+  allowLiveblocks: boolean;
+  allowRealtimeCollaboration: boolean;
+  allowTriggerDev: boolean;
+  isAlgorithmVisualizer: boolean;
+};
+
+const MAIN_AXIS_Y = 120;
+const SUPPORT_START_Y = 275;
+const SUPPORT_ROW_GAP = 124;
+
+const LEGACY_SECTION_LABELS = [
+  "input / origin",
+  "trigger.dev workflows",
+  "ai / runtime",
+  "liveblocks realtime",
+  "storage",
+  "output",
+] as const;
+
+const LAYER_KEYWORDS: Record<ArchitectureLayerId, readonly string[]> = {
+  client: [
+    "user",
+    "client",
+    "browser",
+    "consumer",
+    "viewer",
+  ],
+  frontend: [
+    "frontend",
+    "front end",
+    "ui",
+    "web app",
+    "react",
+    "component",
+    "form",
+    "input",
+    "request",
+  ],
+  backend: [
+    "api",
+    "gateway",
+    "backend",
+    "back end",
+    "auth",
+    "validation",
+    "validate",
+    "router",
+    "route",
+    "server",
+  ],
+  execution: [
+    "algorithm",
+    "dfs",
+    "bfs",
+    "sort",
+    "sorting",
+    "search",
+    "searching",
+    "tree",
+    "graph",
+    "dynamic programming",
+    "execution",
+    "executor",
+    "engine",
+    "step",
+    "generator",
+    "registry",
+    "plugin",
+    "module",
+    "adapter",
+    "schema",
+  ],
+  visualization: [
+    "visualization",
+    "visualisation",
+    "renderer",
+    "render",
+    "canvas",
+    "animation",
+    "playback",
+    "timeline",
+    "frame",
+    "state manager",
+    "state machine",
+    "event",
+    "updates",
+  ],
+  data: [
+    "database",
+    "db",
+    "postgres",
+    "prisma",
+    "cache",
+    "redis",
+    "blob",
+    "object storage",
+    "cdn",
+    "persist",
+    "settings",
+    "template",
+    "storage",
+  ],
+  operations: [
+    "deployment",
+    "deploy",
+    "hosting",
+    "monitoring",
+    "observability",
+    "logs",
+    "metrics",
+    "scaling",
+    "scale",
+    "alerts",
+  ],
+};
+
+const PRIMARY_KEYWORDS: Record<ArchitectureLayerId, readonly string[]> = {
+  client: ["user", "browser", "client"],
+  frontend: ["frontend web app", "frontend", "ui", "web app"],
+  backend: ["api gateway", "backend", "validation", "auth"],
+  execution: ["algorithm service", "step execution engine", "algorithm registry", "plugin"],
+  visualization: ["visualization state manager", "canvas renderer", "playback", "renderer"],
+  data: ["database", "cache", "settings", "templates"],
+  operations: ["deployment", "monitoring", "hosting", "metrics"],
+};
+
+function getLayerIndex(layerId: ArchitectureLayerId): number {
+  return ARCHITECTURE_LAYERS.findIndex((layer) => layer.id === layerId);
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function normalizeText(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
 }
 
-function snap(value: number, grid: number): number {
-  return Math.round(value / grid) * grid;
+function toSearchText(value: string): string {
+  return normalizeText(value).toLowerCase();
 }
 
-function normalizePosition(position: { x: number; y: number }): { x: number; y: number } {
+function canonicalizeArchitectureLabel(label: string): string {
+  const normalized = normalizeText(label);
+
+  return normalized
+    .replace(/\bApplication Programming Interface\b/gi, "API")
+    .replace(/\bUser Interface\b/gi, "UI")
+    .replace(/\bAuthentication\b/gi, "Auth")
+    .replace(/\bDynamic Programming\b/gi, "DP");
+}
+
+function keywordScore(text: string, keywords: readonly string[]): number {
+  return keywords.reduce((score, keyword) => (text.includes(keyword) ? score + 1 : score), 0);
+}
+
+function createPromptScope(prompt: string): PromptScope {
+  const promptText = toSearchText(prompt);
+
   return {
-    x: snap(position.x, 8),
-    y: snap(position.y, 8),
+    allowAiRuntime: /\b(ai|agent|gemini|llm|machine learning|ml model|model inference)\b/.test(promptText),
+    allowAsyncJobs: /\b(queue|worker|background job|async|asynchronous|batch|scheduled|cron)\b/.test(promptText),
+    allowLiveblocks: /\bliveblocks\b/.test(promptText),
+    allowRealtimeCollaboration: /\b(collaboration|collaborative|presence|live cursor|multiplayer|shared room)\b/.test(promptText),
+    allowTriggerDev: /\btrigger\.?dev\b/.test(promptText),
+    isAlgorithmVisualizer:
+      /\balgorithm/.test(promptText) ||
+      /\bvisuali[sz]er\b/.test(promptText) ||
+      /\b(dfs|bfs|sorting|searching|binary search|tree traversal|dynamic programming)\b/.test(promptText),
   };
 }
 
-function normalizeSize(
-  shape: CanvasNodeShape,
-  size?: { width: number; height: number }
-): { width: number; height: number } {
-  const shapeDefaults = CANVAS_SHAPE_SIZE_MAP[shape];
-  if (!size) {
-    return getCanvasNodeSize(shape);
+function isDisallowedByPromptScope(node: CanvasNode, scope: PromptScope): boolean {
+  const text = toSearchText(`${node.id} ${node.data.label}`);
+
+  if (!scope.allowTriggerDev && /\btrigger\.?dev\b|\btriggerdev\b|\bdurable async workflow/.test(text)) {
+    return true;
   }
 
+  if (!scope.allowLiveblocks && /\bliveblocks\b/.test(text)) {
+    return true;
+  }
+
+  if (
+    !scope.allowRealtimeCollaboration &&
+    /\b(presence|live cursor|cursor|room status feed|shared room|participant|collaborator|collaboration)\b/.test(text)
+  ) {
+    return true;
+  }
+
+  if (!scope.allowAiRuntime && /\b(gemini|llm|ai agent|ai model|model inference|language model)\b/.test(text)) {
+    return true;
+  }
+
+  if (!scope.allowAsyncJobs && /\b(queue|worker service|background job|async job|scheduled task)\b/.test(text)) {
+    return true;
+  }
+
+  return false;
+}
+
+function filterNodesForPromptScope(
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+  scope: PromptScope
+): CanvasFlow {
+  const scopedNodes = nodes.filter((node) => !isDisallowedByPromptScope(node, scope));
+  const allowedNodeIds = new Set(scopedNodes.map((node) => node.id));
+  const scopedEdges = edges.filter((edge) => allowedNodeIds.has(edge.source) && allowedNodeIds.has(edge.target));
+
   return {
-    width: snap(clamp(size.width, shapeDefaults.width * 0.65, shapeDefaults.width * 2.3), 2),
-    height: snap(clamp(size.height, shapeDefaults.height * 0.65, shapeDefaults.height * 2.3), 2),
+    nodes: scopedNodes,
+    edges: scopedEdges,
   };
 }
 
-function createNodeId(label: string, sequence: number): string {
-  const slug = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 30);
+function classifyNode(node: CanvasNode): ArchitectureLayerId {
+  const text = toSearchText(`${node.id} ${node.data.label}`);
 
-  return `${slug || "node"}-${Date.now()}-${sequence}`;
-}
+  let bestLayer: ArchitectureLayerId = "execution";
+  let bestScore = 0;
 
-function getNextLayoutPosition(nodes: readonly CanvasNode[]): { x: number; y: number } {
-  if (nodes.length === 0) {
-    return { x: 180, y: 120 };
+  for (const layer of ARCHITECTURE_LAYERS) {
+    const score = keywordScore(text, LAYER_KEYWORDS[layer.id]);
+
+    if (score > bestScore) {
+      bestLayer = layer.id;
+      bestScore = score;
+    }
   }
 
-  const index = nodes.length;
-  const col = index % MAX_LAYOUT_COLUMNS;
-  const row = Math.floor(index / MAX_LAYOUT_COLUMNS);
-
-  const minX = Math.min(...nodes.map((node) => node.position.x));
-  const minY = Math.min(...nodes.map((node) => node.position.y));
-
-  return normalizePosition({
-    x: minX + col * NODE_SPACING_X,
-    y: minY + row * NODE_SPACING_Y,
-  });
+  return bestScore > 0 ? bestLayer : "execution";
 }
 
-function getCanvasCenter(nodes: readonly CanvasNode[]): { x: number; y: number } {
-  if (nodes.length === 0) {
-    return { x: 320, y: 240 };
+function scoreNodePriority(
+  node: CanvasNode,
+  layerId: ArchitectureLayerId,
+  edgeDegreeByNodeId: ReadonlyMap<string, number>
+): number {
+  const text = toSearchText(`${node.id} ${node.data.label}`);
+  const degree = edgeDegreeByNodeId.get(node.id) ?? 0;
+  return degree + keywordScore(text, PRIMARY_KEYWORDS[layerId]) * 5;
+}
+
+function getLayoutShape(layerId: ArchitectureLayerId, tier: LayoutTier, fallback: CanvasNodeShape): CanvasNodeShape {
+  if (layerId === "client" || layerId === "operations") {
+    return "pill";
   }
 
-  const xValues = nodes.map((node) => node.position.x + node.data.size.width / 2);
-  const yValues = nodes.map((node) => node.position.y + node.data.size.height / 2);
-
-  const x = xValues.reduce((sum, value) => sum + value, 0) / xValues.length;
-  const y = yValues.reduce((sum, value) => sum + value, 0) / yValues.length;
-
-  return normalizePosition({ x, y });
-}
-
-function resolveColor(color?: CanvasNodeColorKey): CanvasNodeColorKey {
-  if (color && color in CANVAS_COLOR_PALETTE) {
-    return color;
+  if (layerId === "backend" || layerId === "execution") {
+    return "hexagon";
   }
 
-  return DEFAULT_NODE_COLOR_KEY;
+  if (layerId === "data") {
+    return "cylinder";
+  }
+
+  if (fallback === "diamond" || fallback === "circle") {
+    return "rectangle";
+  }
+
+  return fallback;
 }
 
-function resolveShape(shape?: CanvasNodeShape): CanvasNodeShape {
-  return shape ?? "rectangle";
+function getLayoutSize(tier: LayoutTier, shape: CanvasNodeShape, label: string): CanvasNodeSize {
+  const labelBonus = Math.min(90, Math.max(0, label.length - 22) * 4);
+
+  if (shape === "cylinder") {
+    return {
+      width: tier === "main" ? 220 + labelBonus : 205 + labelBonus,
+      height: tier === "main" ? 150 : 132,
+    };
+  }
+
+  if (shape === "hexagon") {
+    return {
+      width: tier === "main" ? 270 + labelBonus : 235 + labelBonus,
+      height: tier === "main" ? 126 : 110,
+    };
+  }
+
+  if (shape === "pill") {
+    return {
+      width: tier === "main" ? 260 + labelBonus : 220 + labelBonus,
+      height: tier === "main" ? 92 : 76,
+    };
+  }
+
+  return {
+    width: tier === "main" ? 275 + labelBonus : 235 + labelBonus,
+    height: tier === "main" ? 102 : 86,
+  };
+}
+
+function getNodeY(tier: LayoutTier, indexWithinZone: number): number {
+  if (tier === "main") {
+    return MAIN_AXIS_Y;
+  }
+
+  return SUPPORT_START_Y + Math.max(0, indexWithinZone - 1) * SUPPORT_ROW_GAP;
+}
+
+function isSectionHeaderNode(node: CanvasNode): boolean {
+  const id = node.id.toLowerCase();
+  const label = toSearchText(node.data.label);
+
+  return (
+    id.startsWith("section-") ||
+    label.startsWith("zone:") ||
+    LEGACY_SECTION_LABELS.some((sectionLabel) => label === sectionLabel) ||
+    ARCHITECTURE_LAYERS.some((layer) => label === layer.label.toLowerCase())
+  );
+}
+
+function resolveNodeIds(nodes: CanvasNode[]): { nodes: CanvasNode[]; idRemap: Map<string, string> } {
+  const usedIds = new Set<string>();
+  const idRemap = new Map<string, string>();
+
+  return {
+    idRemap,
+    nodes: nodes.map((node, index) => {
+      const baseId = normalizeText(node.id).replace(/\s+/g, "-").toLowerCase() || `node-${index + 1}`;
+      const nextId = usedIds.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+
+      usedIds.add(nextId);
+      if (!idRemap.has(node.id)) {
+        idRemap.set(node.id, nextId);
+      }
+
+      return {
+        ...node,
+        id: nextId,
+      };
+    }),
+  };
+}
+
+function dedupeNodesByLabel(nodes: CanvasNode[]): { nodes: CanvasNode[]; idRemap: Map<string, string> } {
+  const seenByLabel = new Map<string, string>();
+  const idRemap = new Map<string, string>();
+  const dedupedNodes: CanvasNode[] = [];
+
+  for (const node of nodes) {
+    const key = `${classifyNode(node)}:${toSearchText(node.data.label)}`;
+    const existingId = seenByLabel.get(key);
+
+    if (existingId) {
+      idRemap.set(node.id, existingId);
+      continue;
+    }
+
+    seenByLabel.set(key, node.id);
+    idRemap.set(node.id, node.id);
+    dedupedNodes.push(node);
+  }
+
+  return {
+    nodes: dedupedNodes,
+    idRemap,
+  };
+}
+
+function remapEdgeEndpoint(edgeId: string, remap: ReadonlyMap<string, string>): string {
+  return remap.get(edgeId) ?? edgeId;
+}
+
+function getEdgeLabel(edge: CanvasEdge): string {
+  if (typeof edge.data?.label === "string" && edge.data.label.trim().length > 0) {
+    return edge.data.label;
+  }
+
+  return typeof edge.label === "string" ? edge.label : "";
+}
+
+function inferEdgeLabel(sourceNode: CanvasNode, targetNode: CanvasNode): string {
+  const sourceLayer = classifyNode(sourceNode);
+  const targetLayer = classifyNode(targetNode);
+  const sourceText = toSearchText(sourceNode.data.label);
+  const targetText = toSearchText(targetNode.data.label);
+
+  if (targetText.includes("registry") || targetText.includes("plugin")) {
+    return "route algorithm";
+  }
+
+  if (targetText.includes("step") || targetText.includes("execution") || targetText.includes("engine")) {
+    return "generate steps";
+  }
+
+  if (targetText.includes("schema") || targetText.includes("adapter")) {
+    return "normalize events";
+  }
+
+  if (targetText.includes("visualization") || targetText.includes("state")) {
+    return "build state";
+  }
+
+  if (targetText.includes("canvas") || targetText.includes("renderer") || targetText.includes("playback")) {
+    return "render updates";
+  }
+
+  if (targetText.includes("database") || targetText.includes("cache") || targetText.includes("settings")) {
+    return "persist state";
+  }
+
+  if (targetText.includes("monitor") || targetText.includes("log") || targetText.includes("metric")) {
+    return "emit metrics";
+  }
+
+  if (sourceLayer === "client" && targetLayer === "frontend") {
+    return "user action";
+  }
+
+  if (sourceLayer === "frontend" && targetLayer === "backend") {
+    return "submit request";
+  }
+
+  if (sourceLayer === "backend" && targetLayer === "execution") {
+    return "validate input";
+  }
+
+  if (sourceLayer === "execution" && targetLayer === "visualization") {
+    return "step sequence";
+  }
+
+  if (sourceLayer === "visualization" && targetLayer === "frontend") {
+    return "render updates";
+  }
+
+  if (sourceText.includes("settings") || sourceText.includes("template")) {
+    return "load settings";
+  }
+
+  return "data flow";
+}
+
+function normalizeGeneratedEdges(edges: CanvasEdge[], nodes: CanvasNode[]): CanvasEdge[] {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const seenEdgeKeys = new Set<string>();
+  const usedEdgeIds = new Set<string>();
+  const normalizedEdges: CanvasEdge[] = [];
+
+  for (const [index, edge] of edges.entries()) {
+    const sourceNode = nodesById.get(edge.source);
+    const targetNode = nodesById.get(edge.target);
+
+    if (
+      !sourceNode ||
+      !targetNode ||
+      sourceNode.id === targetNode.id ||
+      isSectionHeaderNode(sourceNode) ||
+      isSectionHeaderNode(targetNode)
+    ) {
+      continue;
+    }
+
+    const edgeKey = `${sourceNode.id}->${targetNode.id}`;
+    if (seenEdgeKeys.has(edgeKey)) {
+      continue;
+    }
+
+    seenEdgeKeys.add(edgeKey);
+    const sourceLayer = classifyNode(sourceNode);
+    const targetLayer = classifyNode(targetNode);
+    const isForwardEdge = getLayerIndex(sourceLayer) <= getLayerIndex(targetLayer);
+    const isSameLayerEdge = sourceLayer === targetLayer;
+    const existingLabel = normalizeText(getEdgeLabel(edge));
+    const label = existingLabel || inferEdgeLabel(sourceNode, targetNode);
+    const baseEdgeId = edge.id || `edge-${sourceNode.id}-${targetNode.id}`;
+    const edgeId = usedEdgeIds.has(baseEdgeId) ? `${baseEdgeId}-${index + 1}` : baseEdgeId;
+
+    usedEdgeIds.add(edgeId);
+    normalizedEdges.push({
+      ...edge,
+      id: edgeId,
+      source: sourceNode.id,
+      target: targetNode.id,
+      sourceHandle: isSameLayerEdge ? "bottom-source" : isForwardEdge ? "right-source" : "left-source",
+      targetHandle: isSameLayerEdge ? "top-target" : isForwardEdge ? "left-target" : "right-target",
+      type: "canvasEdge",
+      label,
+      data: {
+        ...(edge.data ?? {}),
+        label,
+      },
+    });
+  }
+
+  return normalizedEdges;
+}
+
+type CanonicalNodeBlueprint = {
+  id: string;
+  label: string;
+  layerId: ArchitectureLayerId;
+  shape: CanvasNodeShape;
+  keywords: readonly string[];
+};
+
+const ALGORITHM_VISUALIZER_BACKBONE = [
+  {
+    id: "user-browser",
+    label: "User / Browser",
+    layerId: "client",
+    shape: "pill",
+    keywords: ["user", "browser", "client"],
+  },
+  {
+    id: "frontend-web-app",
+    label: "Frontend Web App",
+    layerId: "frontend",
+    shape: "rectangle",
+    keywords: ["frontend", "front end", "web app"],
+  },
+  {
+    id: "backend-api",
+    label: "API Gateway / Backend",
+    layerId: "backend",
+    shape: "hexagon",
+    keywords: ["api", "backend", "gateway"],
+  },
+  {
+    id: "algorithm-service",
+    label: "Algorithm Service / Plugin Registry",
+    layerId: "execution",
+    shape: "hexagon",
+    keywords: ["algorithm service", "algorithm registry", "plugin"],
+  },
+  {
+    id: "step-execution-engine",
+    label: "Step Execution Engine",
+    layerId: "execution",
+    shape: "hexagon",
+    keywords: ["step execution", "step generator", "execution engine"],
+  },
+  {
+    id: "visualization-state-manager",
+    label: "Visualization State Manager",
+    layerId: "visualization",
+    shape: "rectangle",
+    keywords: ["visualization state", "state manager", "step schema"],
+  },
+  {
+    id: "canvas-renderer",
+    label: "Canvas Renderer / Playback UI",
+    layerId: "visualization",
+    shape: "rectangle",
+    keywords: ["canvas renderer", "playback", "renderer"],
+  },
+  {
+    id: "database-cache",
+    label: "Database / Cache",
+    layerId: "data",
+    shape: "cylinder",
+    keywords: ["database", "cache", "settings", "templates"],
+  },
+  {
+    id: "deployment-monitoring",
+    label: "Deployment / Monitoring",
+    layerId: "operations",
+    shape: "pill",
+    keywords: ["deployment", "monitoring", "hosting", "metrics"],
+  },
+] as const satisfies readonly CanonicalNodeBlueprint[];
+
+const ALGORITHM_VISUALIZER_BACKBONE_EDGES = [
+  { source: "user-browser", target: "frontend-web-app", label: "user action" },
+  { source: "frontend-web-app", target: "backend-api", label: "submit request" },
+  { source: "backend-api", target: "algorithm-service", label: "validate input" },
+  { source: "algorithm-service", target: "step-execution-engine", label: "load plugin" },
+  { source: "step-execution-engine", target: "visualization-state-manager", label: "generate steps" },
+  { source: "visualization-state-manager", target: "canvas-renderer", label: "build state" },
+  { source: "canvas-renderer", target: "frontend-web-app", label: "render updates" },
+  { source: "backend-api", target: "database-cache", label: "persist settings" },
+  { source: "backend-api", target: "deployment-monitoring", label: "emit metrics" },
+] as const;
+
+function getLayerColor(layerId: ArchitectureLayerId): CanvasNodeColorKey {
+  return (ARCHITECTURE_LAYERS.find((layer) => layer.id === layerId)?.color ?? "cyan") as CanvasNodeColorKey;
+}
+
+function findMatchingNodeId(nodes: CanvasNode[], keywords: readonly string[]): string | null {
+  for (const node of nodes) {
+    const text = toSearchText(`${node.id} ${node.data.label}`);
+    if (keywords.some((keyword) => text.includes(keyword))) {
+      return node.id;
+    }
+  }
+
+  return null;
+}
+
+function createCanonicalNode(blueprint: CanonicalNodeBlueprint): CanvasNode {
+  return {
+    id: blueprint.id,
+    type: "canvasNode",
+    position: {
+      x: 0,
+      y: 0,
+    },
+    data: {
+      label: blueprint.label,
+      color: getLayerColor(blueprint.layerId),
+      shape: blueprint.shape,
+      size: getLayoutSize("main", blueprint.shape, blueprint.label),
+    },
+  };
+}
+
+function ensureAlgorithmVisualizerBackbone(flow: CanvasFlow, scope: PromptScope): CanvasFlow {
+  if (!scope.isAlgorithmVisualizer) {
+    return flow;
+  }
+
+  const nodes = [...flow.nodes];
+  const canonicalIdByBlueprintId = new Map<string, string>();
+
+  for (const blueprint of ALGORITHM_VISUALIZER_BACKBONE) {
+    const existingId = findMatchingNodeId(nodes, blueprint.keywords);
+
+    if (existingId) {
+      canonicalIdByBlueprintId.set(blueprint.id, existingId);
+      continue;
+    }
+
+    nodes.push(createCanonicalNode(blueprint));
+    canonicalIdByBlueprintId.set(blueprint.id, blueprint.id);
+  }
+
+  const edgeKeys = new Set(flow.edges.map((edge) => `${edge.source}->${edge.target}`));
+  const edges = [...flow.edges];
+
+  for (const edge of ALGORITHM_VISUALIZER_BACKBONE_EDGES) {
+    const source = canonicalIdByBlueprintId.get(edge.source);
+    const target = canonicalIdByBlueprintId.get(edge.target);
+
+    if (!source || !target || edgeKeys.has(`${source}->${target}`)) {
+      continue;
+    }
+
+    edgeKeys.add(`${source}->${target}`);
+    edges.push({
+      id: `edge-${source}-${target}`,
+      source,
+      target,
+      type: "canvasEdge",
+      label: edge.label,
+      data: {
+        label: edge.label,
+      },
+    });
+  }
+
+  return {
+    nodes,
+    edges,
+  };
+}
+
+function normalizeGeneratedFlow(flow: CanvasFlow, prompt: string): CanvasFlow {
+  const scope = createPromptScope(prompt);
+  const nonHeaderNodes = flow.nodes
+    .filter((node) => !isSectionHeaderNode(node))
+    .map((node) => ({
+      ...node,
+      type: "canvasNode" as const,
+      data: {
+        ...node.data,
+        label: canonicalizeArchitectureLabel(node.data.label || "Untitled step"),
+      },
+    }));
+  const scopedFlow = ensureAlgorithmVisualizerBackbone(
+    filterNodesForPromptScope(nonHeaderNodes, flow.edges, scope),
+    scope
+  );
+
+  const resolved = resolveNodeIds(scopedFlow.nodes);
+  const idResolvedEdges = scopedFlow.edges.map((edge) => ({
+    ...edge,
+    source: remapEdgeEndpoint(edge.source, resolved.idRemap),
+    target: remapEdgeEndpoint(edge.target, resolved.idRemap),
+  }));
+  const deduped = dedupeNodesByLabel(resolved.nodes);
+  const remappedEdges = idResolvedEdges.map((edge) => ({
+    ...edge,
+    source: remapEdgeEndpoint(edge.source, deduped.idRemap),
+    target: remapEdgeEndpoint(edge.target, deduped.idRemap),
+  }));
+  const edgeDegreeByNodeId = new Map<string, number>();
+
+  for (const edge of remappedEdges) {
+    edgeDegreeByNodeId.set(edge.source, (edgeDegreeByNodeId.get(edge.source) ?? 0) + 1);
+    edgeDegreeByNodeId.set(edge.target, (edgeDegreeByNodeId.get(edge.target) ?? 0) + 1);
+  }
+
+  const nodesByLayer = new Map<ArchitectureLayerId, CanvasNode[]>(
+    ARCHITECTURE_LAYERS.map((layer) => [layer.id, []])
+  );
+
+  for (const node of deduped.nodes) {
+    nodesByLayer.get(classifyNode(node))?.push(node);
+  }
+
+  const layoutNodes: CanvasNode[] = [];
+
+  for (const layer of ARCHITECTURE_LAYERS) {
+    const layerNodes = [...(nodesByLayer.get(layer.id) ?? [])].sort((firstNode, secondNode) => {
+      const firstScore = scoreNodePriority(firstNode, layer.id, edgeDegreeByNodeId);
+      const secondScore = scoreNodePriority(secondNode, layer.id, edgeDegreeByNodeId);
+
+      if (firstScore !== secondScore) {
+        return secondScore - firstScore;
+      }
+
+      return firstNode.data.label.localeCompare(secondNode.data.label);
+    });
+
+    layerNodes.forEach((node, indexWithinLayer) => {
+      const tier: LayoutTier = indexWithinLayer === 0 ? "main" : "support";
+      const shape = getLayoutShape(layer.id, tier, node.data.shape);
+      const label = normalizeText(node.data.label);
+
+      layoutNodes.push({
+        ...node,
+        position: {
+          x: layer.x,
+          y: getNodeY(tier, indexWithinLayer),
+        },
+        data: {
+          ...node.data,
+          label,
+          color: getLayerColor(layer.id),
+          shape,
+          size: getLayoutSize(tier, shape, label),
+        },
+      });
+    });
+  }
+
+  const normalizedEdges = normalizeGeneratedEdges(remappedEdges, layoutNodes);
+
+  return {
+    nodes: layoutNodes,
+    edges: normalizedEdges,
+  };
 }
 
 function setFlowStorage(storageRoot: unknown, nextFlow: CanvasFlow): void {
@@ -254,219 +853,107 @@ function setFlowStorage(storageRoot: unknown, nextFlow: CanvasFlow): void {
   });
 }
 
-function applyAction(flow: CanvasFlow, action: DesignAction, sequence: number): ApplyActionResult {
-  if (action.kind === "add_node") {
-    const shape = resolveShape(action.shape);
-    const size = normalizeSize(shape, action.size);
-    const position = action.position
-      ? normalizePosition(action.position)
-      : getNextLayoutPosition(flow.nodes);
+function parseFlowPayload(rawStorage: unknown): CanvasFlow {
+  const flowCandidate =
+    rawStorage && typeof rawStorage === "object" && "flow" in rawStorage
+      ? (rawStorage as { flow?: unknown }).flow
+      : null;
 
-    const node: CanvasNode = {
-      id: createNodeId(action.label, sequence),
-      type: "canvasNode",
-      position,
-      data: {
-        label: action.label,
-        color: resolveColor(action.color),
-        shape,
-        size,
-      },
-    };
-
-    flow.nodes = [...flow.nodes, node];
-    return {
-      changed: true,
-      message: `Added node "${node.data.label}".`,
-      cursor: {
-        x: node.position.x + node.data.size.width / 2,
-        y: node.position.y + node.data.size.height / 2,
-      },
-    };
-  }
-
-  if (action.kind === "move_node") {
-    const index = flow.nodes.findIndex((node) => node.id === action.nodeId);
-    if (index < 0) {
-      return { changed: false, message: `Skipped move: node "${action.nodeId}" not found.`, cursor: null };
+  const parsed = canvasFlowSchema.safeParse(
+    flowCandidate ?? {
+      nodes: [],
+      edges: [],
     }
+  );
 
-    const node = flow.nodes[index];
-    const nextNode: CanvasNode = {
-      ...node,
-      position: normalizePosition(action.position),
-    };
-
-    flow.nodes = flow.nodes.map((existing, nodeIndex) => (nodeIndex === index ? nextNode : existing));
+  if (!parsed.success) {
     return {
-      changed: true,
-      message: `Moved node "${nextNode.data.label || nextNode.id}".`,
-      cursor: {
-        x: nextNode.position.x + nextNode.data.size.width / 2,
-        y: nextNode.position.y + nextNode.data.size.height / 2,
-      },
+      nodes: [],
+      edges: [],
     };
   }
 
-  if (action.kind === "resize_node") {
-    const index = flow.nodes.findIndex((node) => node.id === action.nodeId);
-    if (index < 0) {
-      return { changed: false, message: `Skipped resize: node "${action.nodeId}" not found.`, cursor: null };
-    }
+  return parsed.data;
+}
 
-    const node = flow.nodes[index];
-    const size = normalizeSize(node.data.shape, action.size);
-    const nextNode: CanvasNode = {
-      ...node,
-      data: {
-        ...node.data,
-        size,
-      },
-    };
+async function buildGeneratedFlow(
+  prompt: string,
+  currentFlow: CanvasFlow
+): Promise<CanvasFlow> {
+  const apiKey =
+    process.env.GOOGLE_API_KEY ??
+    process.env.GEMINI_API_KEY ??
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
-    flow.nodes = flow.nodes.map((existing, nodeIndex) => (nodeIndex === index ? nextNode : existing));
-    return {
-      changed: true,
-      message: `Resized node "${nextNode.data.label || nextNode.id}".`,
-      cursor: {
-        x: nextNode.position.x + nextNode.data.size.width / 2,
-        y: nextNode.position.y + nextNode.data.size.height / 2,
-      },
-    };
-  }
-
-  if (action.kind === "update_node_data") {
-    const index = flow.nodes.findIndex((node) => node.id === action.nodeId);
-    if (index < 0) {
-      return { changed: false, message: `Skipped update: node "${action.nodeId}" not found.`, cursor: null };
-    }
-
-    const node = flow.nodes[index];
-    const nextShape = action.shape ?? node.data.shape;
-    const baseSize = action.size ?? node.data.size;
-    const nextNode: CanvasNode = {
-      ...node,
-      data: {
-        ...node.data,
-        label: action.label ?? node.data.label,
-        color: resolveColor(action.color ?? node.data.color),
-        shape: nextShape,
-        size: normalizeSize(nextShape, baseSize),
-      },
-    };
-
-    flow.nodes = flow.nodes.map((existing, nodeIndex) => (nodeIndex === index ? nextNode : existing));
-    return {
-      changed: true,
-      message: `Updated node "${nextNode.data.label || nextNode.id}".`,
-      cursor: {
-        x: nextNode.position.x + nextNode.data.size.width / 2,
-        y: nextNode.position.y + nextNode.data.size.height / 2,
-      },
-    };
-  }
-
-  if (action.kind === "delete_node") {
-    const target = flow.nodes.find((node) => node.id === action.nodeId);
-    if (!target) {
-      return { changed: false, message: `Skipped delete: node "${action.nodeId}" not found.`, cursor: null };
-    }
-
-    flow.nodes = flow.nodes.filter((node) => node.id !== action.nodeId);
-    flow.edges = flow.edges.filter((edge) => edge.source !== action.nodeId && edge.target !== action.nodeId);
-
-    return {
-      changed: true,
-      message: `Deleted node "${target.data.label || target.id}".`,
-      cursor: getCanvasCenter(flow.nodes),
-    };
-  }
-
-  if (action.kind === "add_edge") {
-    const source = resolveEdgeEndpointByIdOrLabel(
-      flow.nodes,
-      action.sourceId,
-      action.sourceLabel
+  if (!apiKey) {
+    throw new Error(
+      "Missing Gemini API key. Set GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GENERATIVE_AI_API_KEY."
     );
-    const target = resolveEdgeEndpointByIdOrLabel(
-      flow.nodes,
-      action.targetId,
-      action.targetLabel
-    );
-
-    if (!source || !target) {
-      return {
-        changed: false,
-        message: "Skipped edge: source or target node was not found.",
-        cursor: null,
-      };
-    }
-
-    const existingEdge = flow.edges.find(
-      (edge) => edge.source === source.id && edge.target === target.id
-    );
-    if (existingEdge) {
-      return {
-        changed: false,
-        message: `Skipped edge: connection "${source.id} -> ${target.id}" already exists.`,
-        cursor: {
-          x: (source.position.x + target.position.x) / 2,
-          y: (source.position.y + target.position.y) / 2,
-        },
-      };
-    }
-
-    const nextEdge: CanvasEdge = {
-      id: `edge-${source.id}-${target.id}-${Date.now()}-${sequence}`,
-      source: source.id,
-      target: target.id,
-      type: "canvasEdge",
-      label: action.label,
-      data: action.label ? { label: action.label } : undefined,
-    };
-
-    flow.edges = [...flow.edges, nextEdge];
-
-    return {
-      changed: true,
-      message: `Connected "${source.data.label || source.id}" to "${target.data.label || target.id}".`,
-      cursor: {
-        x: (source.position.x + target.position.x) / 2,
-        y: (source.position.y + target.position.y) / 2,
-      },
-    };
   }
 
-  const candidateEdge =
-    action.edgeId
-      ? flow.edges.find((edge) => edge.id === action.edgeId)
-      : flow.edges.find(
-          (edge) => edge.source === action.sourceId && edge.target === action.targetId
-        );
+  const google = createGoogleGenerativeAI({ apiKey });
+  const currentGraph = JSON.stringify(
+    {
+      nodes: currentFlow.nodes.map((node) => ({
+        id: node.id,
+        type: node.type ?? "canvasNode",
+        position: node.position,
+        data: node.data,
+      })),
+      edges: currentFlow.edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type ?? "canvasEdge",
+        label: edge.data?.label ?? edge.label ?? "",
+      })),
+    },
+    null,
+    2
+  );
 
-  if (!candidateEdge) {
-    return {
-      changed: false,
-      message: "Skipped edge delete: no matching edge found.",
-      cursor: null,
-    };
-  }
+  const systemPrompt = [
+    "You are a system-design canvas generator.",
+    "Return one complete canvas graph object that matches the schema exactly.",
+    'Always return a JSON object with two keys: "nodes" and "edges".',
+    'Each node must have id, type="canvasNode", position {x,y}, and data {label,color,shape,size}.',
+    'Each edge must have id, source, target, and type="canvasEdge". Optional label should be mirrored in data.label.',
+    "Only use supported colors: cyan, violet, success, warning.",
+    "Only use supported shapes: rectangle, diamond, circle, pill, cylinder, hexagon.",
+    "Design a clean, tree-like left-to-right architecture diagram, not a mind map.",
+    "Use one dominant hierarchy: User/Browser -> Frontend/UI -> API/Backend -> Algorithm Execution -> Visualization -> Data -> Deployment.",
+    "If the request is for an algorithm visualizer, center the design on request intake, validation/routing, an algorithm registry or plugin interface, a step execution engine, a standard step/event schema, visualization state, canvas playback, and optional persisted settings/templates.",
+    "Show extensibility with one concise registry/plugin/schema concept so new algorithms can be added without rewriting the UI.",
+    "Do not add decorative section header pills or category chips.",
+    "Do not include Trigger.dev, Liveblocks, Gemini, AI-agent runtime, collaboration presence, live cursors, room feeds, queues, or workers unless the user explicitly asks for those technologies or capabilities.",
+    "Use queues/workers only when the request requires async or background jobs.",
+    "Keep labels short, readable, and specific. Every edge must include a short data.label describing the interaction.",
+    "Use edge labels like user action, submit request, validate input, route algorithm, generate steps, build state, render updates, persist settings, and emit metrics.",
+    "Prefer 7 to 12 meaningful nodes, reduce duplicate concepts, and avoid unnecessary cross-links.",
+    "Do not add markdown, explanations, or code fences.",
+  ].join("\n");
 
-  flow.edges = flow.edges.filter((edge) => edge.id !== candidateEdge.id);
-  const sourceNode = flow.nodes.find((node) => node.id === candidateEdge.source);
-  const targetNode = flow.nodes.find((node) => node.id === candidateEdge.target);
+  const userPrompt = [
+    "User request:",
+    prompt,
+    "",
+    "Current canvas state JSON:",
+    currentGraph,
+    "",
+    "Generate the full updated canvas graph in one response.",
+  ].join("\n");
 
-  return {
-    changed: true,
-    message: "Deleted edge.",
-    cursor:
-      sourceNode && targetNode
-        ? {
-            x: (sourceNode.position.x + targetNode.position.x) / 2,
-            y: (sourceNode.position.y + targetNode.position.y) / 2,
-          }
-        : getCanvasCenter(flow.nodes),
-  };
+  const result = await generateText({
+    model: google("gemini-2.5-flash"),
+    temperature: 0.2,
+    system: systemPrompt,
+    prompt: userPrompt,
+    output: Output.object({
+      schema: canvasFlowSchema,
+    }),
+  });
+
+  return normalizeGeneratedFlow(result.output, prompt);
 }
 
 async function broadcastStatus(
@@ -488,6 +975,76 @@ async function broadcastStatus(
   };
 
   await liveblocks.broadcastEvent(roomId, event);
+  await publishAiStatus(roomId, {
+    active: phase === "start" || phase === "processing",
+    text: message,
+  });
+}
+
+function isFeedAlreadyExistsError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const typedError = error as LiveblocksApiError;
+  if (typedError.status === 409) {
+    return true;
+  }
+
+  return (typedError.message ?? "").toLowerCase().includes("already exists");
+}
+
+async function ensureAiStatusFeed(roomId: string): Promise<void> {
+  try {
+    await liveblocks.createFeed({
+      roomId,
+      feedId: AI_STATUS_FEED_ID,
+      metadata: {
+        name: "AI Status",
+      },
+    });
+  } catch (error) {
+    if (!isFeedAlreadyExistsError(error)) {
+      throw error;
+    }
+  }
+}
+
+function normalizeAiStatusText(text: string | undefined): string | undefined {
+  if (typeof text !== "string") {
+    return undefined;
+  }
+
+  const normalized = normalizeText(text);
+  if (normalized.length <= AI_STATUS_TEXT_MAX_LENGTH) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, AI_STATUS_TEXT_MAX_LENGTH - 3).trimEnd()}...`;
+}
+
+async function publishAiStatus(roomId: string, payload: AiStatusFeedMessage): Promise<void> {
+  const normalizedPayload: AiStatusFeedMessage = {
+    ...payload,
+    text: normalizeAiStatusText(payload.text),
+  };
+  const parsedPayload = aiStatusFeedMessageSchema.safeParse(normalizedPayload);
+
+  if (!parsedPayload.success) {
+    console.warn("Skipping invalid AI status payload.", parsedPayload.error.flatten());
+    return;
+  }
+
+  try {
+    await ensureAiStatusFeed(roomId);
+    await liveblocks.createFeedMessage({
+      roomId,
+      feedId: AI_STATUS_FEED_ID,
+      data: parsedPayload.data,
+    });
+  } catch (error) {
+    console.warn("Failed to publish AI status feed message.", error);
+  }
 }
 
 async function setAgentPresence(
@@ -506,539 +1063,10 @@ async function setAgentPresence(
   });
 }
 
-function parseFlowPayload(rawStorage: unknown): CanvasFlow {
-  const flowCandidate =
-    rawStorage &&
-    typeof rawStorage === "object" &&
-    "flow" in rawStorage
-      ? (rawStorage as { flow?: unknown }).flow
-      : null;
-
-  const parsed = canvasFlowSchema.safeParse(
-    flowCandidate ?? {
-      nodes: [],
-      edges: [],
-    }
-  );
-
-  if (!parsed.success) {
-    return {
-      nodes: [],
-      edges: [],
-    };
-  }
-
-  return parsed.data;
-}
-
-function toStringValue(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function toNumberValue(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-}
-
-function parsePositionValue(value: unknown): { x: number; y: number } | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const record = value as Record<string, unknown>;
-  const x = toNumberValue(record.x);
-  const y = toNumberValue(record.y);
-
-  if (x === undefined || y === undefined) {
-    return undefined;
-  }
-
-  return { x, y };
-}
-
-function parseSizeValue(value: unknown): { width: number; height: number } | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const record = value as Record<string, unknown>;
-  const width = toNumberValue(record.width);
-  const height = toNumberValue(record.height);
-
-  if (width === undefined || height === undefined || width <= 0 || height <= 0) {
-    return undefined;
-  }
-
-  return { width, height };
-}
-
-function normalizeActionKind(raw: string): string {
-  return raw.toLowerCase().replace(/[\s-]+/g, "_");
-}
-
-function resolveEdgeEndpointByIdOrLabel(
-  nodes: readonly CanvasNode[],
-  id: string | undefined,
-  label: string | undefined
-): CanvasNode | undefined {
-  if (id) {
-    const byId = nodes.find((node) => node.id === id);
-    if (byId) {
-      return byId;
-    }
-  }
-
-  if (!label) {
-    return undefined;
-  }
-
-  const normalized = label.trim().toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-
-  return nodes.find((node) => node.data.label.trim().toLowerCase() === normalized);
-}
-
-function parseActionCandidate(candidate: unknown): DesignAction | null {
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-
-  const record = candidate as Record<string, unknown>;
-  const kindRaw = toStringValue(record.kind ?? record.action ?? record.type ?? record.op);
-  if (!kindRaw) {
-    return null;
-  }
-
-  const kind = normalizeActionKind(kindRaw);
-  const nodeId = toStringValue(record.nodeId ?? record.id ?? record.node_id ?? record.node);
-  const position = parsePositionValue(record.position) ?? parsePositionValue({ x: record.x, y: record.y });
-  const size = parseSizeValue(record.size) ?? parseSizeValue({ width: record.width, height: record.height });
-  const label = toStringValue(record.label ?? record.name ?? record.title ?? record.text);
-  const sourceId = toStringValue(record.sourceId ?? record.source ?? record.from ?? record.sourceNodeId);
-  const targetId = toStringValue(record.targetId ?? record.target ?? record.to ?? record.targetNodeId);
-  const sourceLabel = toStringValue(record.sourceLabel ?? record.sourceName ?? record.fromLabel);
-  const targetLabel = toStringValue(record.targetLabel ?? record.targetName ?? record.toLabel);
-  const edgeId = toStringValue(record.edgeId ?? record.edge_id ?? record.id);
-  const shapeCandidate = toStringValue(record.shape);
-  const colorCandidate = toStringValue(record.color);
-  const parsedShape = shapeCandidate ? canvasNodeShapeSchema.safeParse(shapeCandidate) : null;
-  const parsedColor = colorCandidate ? canvasNodeColorKeySchema.safeParse(colorCandidate) : null;
-  const shape = parsedShape?.success ? parsedShape.data : undefined;
-  const color = parsedColor?.success ? parsedColor.data : undefined;
-
-  if (kind === "add_node" || kind === "create_node" || kind === "new_node" || kind === "insert_node") {
-    if (!label) {
-      return null;
-    }
-
-    return {
-      kind: "add_node",
-      label,
-      shape,
-      color,
-      position,
-      size,
-    };
-  }
-
-  if (kind === "move_node" || kind === "position_node" || kind === "relocate_node") {
-    if (!nodeId || !position) {
-      return null;
-    }
-
-    return {
-      kind: "move_node",
-      nodeId,
-      position,
-    };
-  }
-
-  if (kind === "resize_node" || kind === "scale_node") {
-    if (!nodeId || !size) {
-      return null;
-    }
-
-    return {
-      kind: "resize_node",
-      nodeId,
-      size,
-    };
-  }
-
-  if (kind === "update_node_data" || kind === "update_node" || kind === "edit_node") {
-    if (!nodeId) {
-      return null;
-    }
-
-    if (!label && !shape && !color && !size) {
-      return null;
-    }
-
-    return {
-      kind: "update_node_data",
-      nodeId,
-      label,
-      shape,
-      color,
-      size,
-    };
-  }
-
-  if (kind === "delete_node" || kind === "remove_node") {
-    if (!nodeId) {
-      return null;
-    }
-
-    return {
-      kind: "delete_node",
-      nodeId,
-    };
-  }
-
-  if (kind === "add_edge" || kind === "connect_nodes" || kind === "create_edge") {
-    if (!sourceId && !sourceLabel) {
-      return null;
-    }
-
-    if (!targetId && !targetLabel) {
-      return null;
-    }
-
-    return {
-      kind: "add_edge",
-      sourceId,
-      sourceLabel,
-      targetId,
-      targetLabel,
-      label,
-    };
-  }
-
-  if (kind === "delete_edge" || kind === "remove_edge" || kind === "disconnect_nodes") {
-    if (!edgeId && !(sourceId && targetId)) {
-      return null;
-    }
-
-    return {
-      kind: "delete_edge",
-      edgeId,
-      sourceId,
-      targetId,
-    };
-  }
-
-  return null;
-}
-
-function extractJsonValue(text: string): unknown {
-  const fencedJson = text.match(/```json\s*([\s\S]*?)\s*```/i);
-  if (fencedJson?.[1]) {
-    try {
-      return JSON.parse(fencedJson[1]);
-    } catch {
-      // continue to generic extraction
-    }
-  }
-
-  const objectStart = text.indexOf("{");
-  if (objectStart < 0) {
-    return null;
-  }
-
-  let depth = 0;
-  for (let index = objectStart; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        const candidate = text.slice(objectStart, index + 1);
-        try {
-          return JSON.parse(candidate);
-        } catch {
-          return null;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
-function parsePlanFromUnknown(payload: unknown): DesignPlan | null {
-  const root =
-    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
-  const actionContainer = root
-    ? root.actions ?? root.plan ?? root.steps ?? payload
-    : payload;
-  const actionCandidates = Array.isArray(actionContainer) ? actionContainer : [];
-  const actions: DesignAction[] = actionCandidates
-    .map((candidate) => parseActionCandidate(candidate))
-    .filter((candidate): candidate is DesignAction => candidate !== null)
-    .slice(0, MAX_ACTION_COUNT);
-
-  if (actions.length === 0) {
-    return null;
-  }
-
-  return {
-    summary: toStringValue(root?.summary),
-    actions,
-  };
-}
-
-function buildHeuristicPlan(prompt: string, currentFlow: CanvasFlow): DesignPlan {
-  const normalizedPrompt = prompt.toLowerCase();
-  const actions: DesignAction[] = [];
-  const shouldSeedNewGraph = currentFlow.nodes.length === 0;
-
-  if (!shouldSeedNewGraph) {
-    return {
-      summary: "Heuristic fallback update plan.",
-      actions: [
-        {
-          kind: "add_node",
-          label: "Architecture Update",
-          shape: "rectangle",
-          color: "cyan",
-        },
-      ],
-    };
-  }
-
-  const nodeCatalog: Array<{ key: string; label: string; shape: CanvasNodeShape; color: CanvasNodeColorKey }> = [
-    { key: "gateway", label: "Chat API Gateway", shape: "pill", color: "cyan" },
-    { key: "websocket", label: "WebSocket Server", shape: "rectangle", color: "violet" },
-    { key: "presence", label: "Presence Service", shape: "rectangle", color: "success" },
-    { key: "db", label: "Message History DB", shape: "cylinder", color: "warning" },
-    { key: "pubsub", label: "Redis Pub/Sub", shape: "hexagon", color: "cyan" },
-    { key: "media", label: "S3 Media Bucket", shape: "circle", color: "violet" },
-  ];
-
-  const include = (key: string): boolean => {
-    if (key === "gateway") {
-      return true;
-    }
-
-    if (key === "websocket") {
-      return /websocket|socket|live messaging|real.?time/.test(normalizedPrompt);
-    }
-
-    if (key === "presence") {
-      return /presence|online users|user status/.test(normalizedPrompt);
-    }
-
-    if (key === "db") {
-      return /database|db|postgres|mysql|relational|message history/.test(normalizedPrompt);
-    }
-
-    if (key === "pubsub") {
-      return /redis|pub.?sub|queue|horizontal/.test(normalizedPrompt);
-    }
-
-    if (key === "media") {
-      return /s3|bucket|media|attachment|upload/.test(normalizedPrompt);
-    }
-
-    return false;
-  };
-
-  const selectedNodes = nodeCatalog.filter((node) => include(node.key));
-  for (const node of selectedNodes) {
-    actions.push({
-      kind: "add_node",
-      label: node.label,
-      shape: node.shape,
-      color: node.color,
-    });
-  }
-
-  const has = (label: string): boolean => selectedNodes.some((node) => node.label === label);
-  if (has("Chat API Gateway") && has("WebSocket Server")) {
-    actions.push({
-      kind: "add_edge",
-      sourceLabel: "Chat API Gateway",
-      targetLabel: "WebSocket Server",
-      label: "upgrade auth",
-    });
-  }
-  if (has("WebSocket Server") && has("Presence Service")) {
-    actions.push({
-      kind: "add_edge",
-      sourceLabel: "WebSocket Server",
-      targetLabel: "Presence Service",
-      label: "presence heartbeat",
-    });
-  }
-  if (has("WebSocket Server") && has("Redis Pub/Sub")) {
-    actions.push({
-      kind: "add_edge",
-      sourceLabel: "WebSocket Server",
-      targetLabel: "Redis Pub/Sub",
-      label: "fan-out events",
-    });
-  }
-  if (has("Redis Pub/Sub") && has("WebSocket Server")) {
-    actions.push({
-      kind: "add_edge",
-      sourceLabel: "Redis Pub/Sub",
-      targetLabel: "WebSocket Server",
-      label: "incoming messages",
-    });
-  }
-  if (has("Chat API Gateway") && has("Message History DB")) {
-    actions.push({
-      kind: "add_edge",
-      sourceLabel: "Chat API Gateway",
-      targetLabel: "Message History DB",
-      label: "persist history",
-    });
-  }
-  if (has("Chat API Gateway") && has("S3 Media Bucket")) {
-    actions.push({
-      kind: "add_edge",
-      sourceLabel: "Chat API Gateway",
-      targetLabel: "S3 Media Bucket",
-      label: "store attachments",
-    });
-  }
-
-  return {
-    summary: "Heuristic fallback architecture plan.",
-    actions: actions.slice(0, MAX_ACTION_COUNT),
-  };
-}
-
-async function buildPlan(prompt: string, currentFlow: CanvasFlow): Promise<DesignPlan> {
-  const apiKey =
-    process.env.GOOGLE_API_KEY ??
-    process.env.GEMINI_API_KEY ??
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error(
-      "Missing Gemini API key. Set GOOGLE_API_KEY, GEMINI_API_KEY, or GOOGLE_GENERATIVE_AI_API_KEY."
-    );
-  }
-
-  const google = createGoogleGenerativeAI({ apiKey });
-  const shapeList = canvasNodeShapeSchema.options.join(", ");
-  const colorList = canvasNodeColorKeySchema.options.join(", ");
-  const currentGraph = JSON.stringify(
-    {
-      nodes: currentFlow.nodes.map((node) => ({
-        id: node.id,
-        label: node.data.label,
-        shape: node.data.shape,
-        color: node.data.color,
-        position: node.position,
-        size: node.data.size,
-      })),
-      edges: currentFlow.edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.data?.label ?? edge.label ?? "",
-      })),
-    },
-    null,
-    2
-  );
-
-  const systemPrompt = [
-    "You are a collaborative architecture canvas planner.",
-    "Return actions that strictly follow the provided schema.",
-    `Allowed node shapes: ${shapeList}.`,
-    `Allowed node colors: ${colorList}.`,
-    "Do not invent shape or color values outside the allowed list.",
-    "Respect spacing: keep at least 180px vertical and 240px horizontal distance between newly added nodes.",
-    "For edge actions, you may reference nodes by sourceId/targetId or sourceLabel/targetLabel.",
-    "Only reference existing node IDs from the provided canvas when moving/resizing/updating/deleting nodes.",
-    "Do not emit no-op actions.",
-  ].join("\n");
-  const userPrompt = [
-    "User prompt:",
-    prompt,
-    "",
-    "Current canvas state (JSON):",
-    currentGraph,
-    "",
-    "Produce compact, deterministic actions for the requested architecture changes.",
-  ].join("\n");
-
-  try {
-    const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),
-      schema: designPlanSchema,
-      temperature: 0.2,
-      system: systemPrompt,
-      prompt: userPrompt,
-    });
-
-    return object;
-  } catch (error) {
-    if (!NoObjectGeneratedError.isInstance(error)) {
-      throw error;
-    }
-
-    console.warn("Primary structured plan generation failed. Falling back to text recovery.", {
-      message: error.message,
-      finishReason: error.finishReason,
-    });
-
-    const fallbackTextFromError = typeof error.text === "string" ? error.text : "";
-    const recoveredFromError = parsePlanFromUnknown(extractJsonValue(fallbackTextFromError));
-    if (recoveredFromError && recoveredFromError.actions.length > 0) {
-      return recoveredFromError;
-    }
-
-    const fallbackResponse = await generateText({
-      model: google("gemini-2.5-flash"),
-      temperature: 0.1,
-      system: [
-        systemPrompt,
-        "Respond with JSON only.",
-        `The top-level JSON must be: {"summary": string, "actions": DesignAction[]}.`,
-      ].join("\n"),
-      prompt: userPrompt,
-    });
-
-    const recoveredFromText = parsePlanFromUnknown(extractJsonValue(fallbackResponse.text));
-    if (recoveredFromText && recoveredFromText.actions.length > 0) {
-      return recoveredFromText;
-    }
-
-    const heuristicPlan = buildHeuristicPlan(prompt, currentFlow);
-    if (heuristicPlan.actions.length > 0) {
-      return heuristicPlan;
-    }
-
-    throw new Error("Unable to generate a valid design plan from model output.");
-  }
-}
-
 export const designAgent = schemaTask({
   id: "design-agent",
   description:
-    "Gemini-powered collaborative design agent that mutates Liveblocks canvas state and publishes shared status.",
+    "Gemini-powered collaborative design agent that generates a full canvas graph and writes it once to Liveblocks.",
   schema: designAgentPayloadSchema,
   maxDuration: 1800,
   run: async (payload, { ctx }) => {
@@ -1048,50 +1076,48 @@ export const designAgent = schemaTask({
       cursor: { x: 320, y: 240 },
       thinking: true,
     });
-    await broadcastStatus(payload.roomId, runId, "start", "Nexus AI started designing the canvas.", 0, 0);
+    await broadcastStatus(payload.roomId, runId, "start", "Nexus AI started designing the canvas.", 0, 1);
+
+    try {
+      await prisma.taskRun.upsert({
+        where: {
+          runId,
+        },
+        create: {
+          runId,
+          projectId: payload.projectId,
+          userId: payload.userId,
+        },
+        update: {
+          projectId: payload.projectId,
+          userId: payload.userId,
+        },
+        select: {
+          id: true,
+        },
+      });
+    } catch (error) {
+      console.warn("Failed to persist design-agent task run metadata.", error);
+    }
 
     try {
       const storage = await liveblocks.getStorageDocument(payload.roomId, "json");
-      const flow = parseFlowPayload(storage);
-      const workingFlow: CanvasFlow = {
-        nodes: [...flow.nodes],
-        edges: [...flow.edges],
-      };
+      const currentFlow = parseFlowPayload(storage);
 
       await broadcastStatus(
         payload.roomId,
         runId,
         "processing",
-        "Nexus AI is interpreting your prompt and preparing canvas actions.",
-        0,
-        0
+        "Nexus AI is generating a complete updated architecture graph.",
+        1,
+        1
       );
 
-      const plan = await buildPlan(payload.prompt, workingFlow);
-      const totalSteps = plan.actions.length;
-      let appliedSteps = 0;
+      const generatedFlow = await buildGeneratedFlow(payload.prompt, currentFlow);
 
-      for (const [index, action] of plan.actions.entries()) {
-        const step = index + 1;
-        const result = applyAction(workingFlow, action, step);
-
-        if (!result.changed) {
-          await broadcastStatus(payload.roomId, runId, "processing", result.message, step, totalSteps);
-          continue;
-        }
-
-        await liveblocks.mutateStorage(payload.roomId, ({ root }) => {
-          setFlowStorage(root, workingFlow);
-        });
-
-        appliedSteps += 1;
-        await setAgentPresence(payload.roomId, {
-          cursor: result.cursor,
-          thinking: true,
-        });
-        await broadcastStatus(payload.roomId, runId, "processing", result.message, step, totalSteps);
-        await sleep(STREAM_DELAY_MS);
-      }
+      await liveblocks.mutateStorage(payload.roomId, ({ root }) => {
+        setFlowStorage(root, generatedFlow);
+      });
 
       await setAgentPresence(payload.roomId, {
         cursor: null,
@@ -1101,9 +1127,9 @@ export const designAgent = schemaTask({
         payload.roomId,
         runId,
         "complete",
-        `Nexus AI finished. Applied ${appliedSteps} canvas updates.`,
-        totalSteps,
-        totalSteps
+        `Nexus AI finished. Wrote ${generatedFlow.nodes.length} nodes and ${generatedFlow.edges.length} edges.`,
+        1,
+        1
       );
 
       return {
@@ -1111,9 +1137,8 @@ export const designAgent = schemaTask({
         runId,
         roomId: payload.roomId,
         prompt: payload.prompt,
-        planSummary: plan.summary ?? null,
-        totalActions: plan.actions.length,
-        appliedActions: appliedSteps,
+        nodeCount: generatedFlow.nodes.length,
+        edgeCount: generatedFlow.edges.length,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown design-agent failure.";
@@ -1122,14 +1147,7 @@ export const designAgent = schemaTask({
         cursor: null,
         thinking: false,
       });
-      await broadcastStatus(
-        payload.roomId,
-        runId,
-        "error",
-        `Nexus AI failed: ${errorMessage}`,
-        0,
-        0
-      );
+      await broadcastStatus(payload.roomId, runId, "error", `Nexus AI failed: ${errorMessage}`, 0, 1);
 
       throw error;
     }

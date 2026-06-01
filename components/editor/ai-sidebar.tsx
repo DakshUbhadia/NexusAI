@@ -1,13 +1,21 @@
 'use client'
 
-import { useCallback, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactElement } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactElement } from 'react'
 
-import { Bot, Download, FileText, Send, Sparkles, X } from 'lucide-react'
+import { Bot, Download, FileText, LoaderCircle, Send, Sparkles, X } from 'lucide-react'
+import { useCreateFeed, useCreateFeedMessage, useFeedMessages, useSelf } from '@liveblocks/react'
+import { useRealtimeRun } from '@trigger.dev/react-hooks'
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import {
+  AI_CHAT_FEED_ID,
+  AI_STATUS_FEED_ID,
+  parseAiChatFeedMessage,
+  parseAiStatusFeedMessage,
+} from '@/types/tasks'
 
 const starterPrompts = [
   'Design an e-commerce backend',
@@ -16,27 +24,129 @@ const starterPrompts = [
 ] as const
 
 type AiSidebarProps = {
-  readonly open: boolean
-  readonly onOpenChange: (open: boolean) => void
   readonly projectId: string
   readonly roomId: string
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
 }
 
-type ChatMessage = {
+type ChatFeedMessage = {
   readonly id: string
+  readonly createdAt: number
   readonly role: 'user' | 'assistant'
+  readonly sender: string
   readonly content: string
+  readonly timestamp: string
 }
 
-function createMessageId(): string {
-  return `message-${Date.now()}-${Math.random().toString(16).slice(2)}`
+function isFeedAlreadyExistsError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  return error.message.toLowerCase().includes('already exists')
 }
 
-export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarProps): ReactElement {
+function formatMessageTime(timestamp: string, createdAt: number): string {
+  const timestampDate = new Date(timestamp)
+  const safeDate = Number.isNaN(timestampDate.getTime()) ? new Date(createdAt) : timestampDate
+
+  return safeDate.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+type ActiveRunState = {
+  readonly runId: string
+  readonly publicToken: string
+}
+
+function readErrorMessage(payload: unknown, fallbackMessage: string): string {
+  if (!payload || typeof payload !== 'object') {
+    return fallbackMessage
+  }
+
+  const errorPayload = (payload as { error?: unknown }).error
+
+  if (!errorPayload || typeof errorPayload !== 'object') {
+    return fallbackMessage
+  }
+
+  const message = (errorPayload as { message?: unknown }).message
+  return typeof message === 'string' && message.trim().length > 0 ? message : fallbackMessage
+}
+
+function readDataObject(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const data = (payload as { data?: unknown }).data
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+
+  return data as Record<string, unknown>
+}
+
+function getRunErrorMessage(runError: unknown): string | null {
+  if (!runError || typeof runError !== 'object') {
+    return null
+  }
+
+  const message = (runError as { message?: unknown }).message
+  return typeof message === 'string' && message.trim().length > 0 ? message : null
+}
+
+export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarProps): ReactElement {
   const [prompt, setPrompt] = useState('')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSending, setIsSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const processedRunIdsRef = useRef<Set<string>>(new Set())
+  const [activeRun, setActiveRun] = useState<ActiveRunState | null>(null)
+  const createFeed = useCreateFeed()
+  const createFeedMessage = useCreateFeedMessage()
+  const self = useSelf((current) => current)
+  const { messages: feedMessages } = useFeedMessages(AI_STATUS_FEED_ID, {
+    limit: 1,
+  })
+  const { messages: chatFeedMessages } = useFeedMessages(AI_CHAT_FEED_ID)
+  const latestFeedStatus = useMemo(() => {
+    const latestMessage = feedMessages?.[0]
+    return parseAiStatusFeedMessage(latestMessage?.data ?? null)
+  }, [feedMessages])
+  const chatMessages = useMemo<ChatFeedMessage[]>(() => {
+    if (!chatFeedMessages) {
+      return []
+    }
+
+    return [...chatFeedMessages]
+      .sort((first, second) => first.createdAt - second.createdAt)
+      .map((message) => {
+        const parsed = parseAiChatFeedMessage(message.data)
+        if (!parsed) {
+          return null
+        }
+
+        return {
+          id: message.id,
+          createdAt: message.createdAt,
+          role: parsed.role,
+          sender: parsed.sender,
+          content: parsed.content,
+          timestamp: parsed.timestamp,
+        }
+      })
+      .filter((message): message is ChatFeedMessage => message !== null)
+  }, [chatFeedMessages])
+  const { run: realtimeRun, error: realtimeRunError } = useRealtimeRun(activeRun?.runId, {
+    accessToken: activeRun?.publicToken,
+    enabled: Boolean(activeRun?.runId && activeRun?.publicToken),
+  })
+  const isRunActive = activeRun !== null && !(realtimeRun?.isCompleted ?? false)
+  const isComposerBusy = isSending || isRunActive
+  const sharedStatusText = latestFeedStatus?.text ?? 'Nexus AI is working on your design...'
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current
@@ -68,78 +178,167 @@ export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarPr
     [resizeTextarea]
   )
 
-  const appendAssistantMessage = useCallback((content: string): void => {
-    setMessages((current) => [
-      ...current,
-      {
-        id: createMessageId(),
-        role: 'assistant',
-        content,
-      },
-    ])
-  }, [])
+  const currentSenderName = self?.info?.name?.trim() || 'Anonymous'
 
-  const handleSubmit = useCallback(() => {
-    const trimmedPrompt = prompt.trim()
+  const sendAssistantMessage = useCallback(
+    async (content: string) => {
+      try {
+        await createFeedMessage(AI_CHAT_FEED_ID, {
+          sender: 'Nexus AI',
+          role: 'assistant',
+          content,
+          timestamp: new Date().toISOString(),
+        })
+      } catch (error) {
+        console.error('Failed to send ai-chat assistant message.', error)
+      }
+    },
+    [createFeedMessage]
+  )
 
-    if (!trimmedPrompt || isSubmitting) {
+  useEffect(() => {
+    let cancelled = false
+
+    async function ensureChatFeed(): Promise<void> {
+      try {
+        await createFeed(AI_CHAT_FEED_ID, {
+          metadata: {
+            name: 'AI Chat',
+          },
+        })
+      } catch (error) {
+        if (!isFeedAlreadyExistsError(error) && !cancelled) {
+          console.warn('Failed to create ai-chat feed.', error)
+        }
+      }
+    }
+
+    void ensureChatFeed()
+
+    return () => {
+      cancelled = true
+    }
+  }, [createFeed])
+
+  useEffect(() => {
+    if (!activeRun || !realtimeRun || realtimeRun.id !== activeRun.runId || !realtimeRun.isCompleted) {
       return
     }
 
-    setMessages((current) => [
-      ...current,
-      {
-        id: createMessageId(),
-        role: 'user',
-        content: trimmedPrompt,
-      },
-    ])
-    setPrompt('')
-    globalThis.requestAnimationFrame(resizeTextarea)
-    setIsSubmitting(true)
-
-    const requestBody = {
-      prompt: trimmedPrompt,
-      roomId,
-      projectId,
+    if (processedRunIdsRef.current.has(activeRun.runId)) {
+      return
     }
 
-    void fetch('/api/ai/design', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    })
-      .then(async (response) => {
-        const payload = (await response.json().catch(() => null)) as
-          | {
-              data?: {
-                runId?: string
-              }
-              error?: {
-                message?: string
-              }
-            }
-          | null
+    processedRunIdsRef.current.add(activeRun.runId)
+    setActiveRun(null)
 
-        if (!response.ok) {
-          const message = payload?.error?.message ?? 'Failed to start AI design task.'
-          appendAssistantMessage(`I couldn't start the design run: ${message}`)
-          return
+    if (realtimeRun.isSuccess) {
+      void sendAssistantMessage('Nexus AI finished updating the canvas.')
+      return
+    }
+
+    const runErrorMessage = getRunErrorMessage(realtimeRun.error)
+    const errorSummary = runErrorMessage ? ` ${runErrorMessage}` : ''
+    void sendAssistantMessage(`Nexus AI could not complete this run.${errorSummary}`)
+  }, [activeRun, realtimeRun, sendAssistantMessage])
+
+  useEffect(() => {
+    if (!activeRun || !realtimeRunError || processedRunIdsRef.current.has(activeRun.runId)) {
+      return
+    }
+
+    processedRunIdsRef.current.add(activeRun.runId)
+    setActiveRun(null)
+    void sendAssistantMessage(`Nexus AI run monitoring failed: ${realtimeRunError.message}`)
+  }, [activeRun, realtimeRunError, sendAssistantMessage])
+
+  const handleSubmit = useCallback(async () => {
+    const trimmedPrompt = prompt.trim()
+
+    if (!trimmedPrompt || isComposerBusy) {
+      return
+    }
+
+    setIsSending(true)
+
+    try {
+      await createFeedMessage(AI_CHAT_FEED_ID, {
+        sender: currentSenderName,
+        role: 'user',
+        content: trimmedPrompt,
+        timestamp: new Date().toISOString(),
+      })
+
+      setPrompt('')
+      globalThis.requestAnimationFrame(resizeTextarea)
+
+      const designResponse = await fetch('/api/ai/design', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: trimmedPrompt,
+          roomId,
+          projectId,
+        }),
+      })
+
+      const designPayload = (await designResponse.json().catch(() => null)) as unknown
+
+      if (!designResponse.ok) {
+        throw new Error(readErrorMessage(designPayload, 'Failed to start the design run.'))
+      }
+
+      const designData = readDataObject(designPayload)
+      const runId = typeof designData?.runId === 'string' ? designData.runId : null
+      const responsePublicToken = typeof designData?.publicToken === 'string' ? designData.publicToken : null
+
+      if (!runId) {
+        throw new Error('Design run did not return a run ID.')
+      }
+
+      let publicToken = responsePublicToken
+
+      if (!publicToken) {
+        const tokenResponse = await fetch('/api/ai/design/token', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            runId,
+          }),
+        })
+
+        const tokenPayload = (await tokenResponse.json().catch(() => null)) as unknown
+
+        if (!tokenResponse.ok) {
+          throw new Error(readErrorMessage(tokenPayload, 'Failed to create the run token.'))
         }
 
-        const runId = payload?.data?.runId ?? 'unknown'
-        appendAssistantMessage(`Design run started. Run ID: ${runId}`)
+        const tokenData = readDataObject(tokenPayload)
+        const resolvedToken = typeof tokenData?.token === 'string' ? tokenData.token : null
+
+        if (!resolvedToken) {
+          throw new Error('Run token response was invalid.')
+        }
+
+        publicToken = resolvedToken
+      }
+
+      setActiveRun({
+        runId,
+        publicToken,
       })
-      .catch((error: unknown) => {
-        console.error('Failed to trigger design task from AI sidebar.', error)
-        appendAssistantMessage('I could not reach the server. Please try again.')
-      })
-      .finally(() => {
-        setIsSubmitting(false)
-      })
-  }, [appendAssistantMessage, isSubmitting, projectId, prompt, resizeTextarea, roomId])
+    } catch (error) {
+      console.error('Failed to submit AI design request.', error)
+      const message = error instanceof Error ? error.message : 'Failed to submit AI design request.'
+      void sendAssistantMessage(message)
+    } finally {
+      setIsSending(false)
+    }
+  }, [createFeedMessage, currentSenderName, isComposerBusy, projectId, prompt, resizeTextarea, roomId, sendAssistantMessage])
 
   const handlePromptKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -204,7 +403,7 @@ export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarPr
         <TabsContent className="min-h-0 flex-1 data-[state=inactive]:hidden" value="architect">
           <div className="flex h-full min-h-0 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              {messages.length === 0 ? (
+              {chatMessages.length === 0 ? (
                 <div className="flex min-h-full flex-col items-center justify-center text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface-elevated) shadow-(--shadow-md)">
                     <Bot className="size-5 text-(--accent-primary)" />
@@ -228,17 +427,21 @@ export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarPr
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {messages.map((message) => (
+                  {chatMessages.map((message) => (
                     <div
                       className={cn(
                         'max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-(--shadow-sm)',
                         message.role === 'user'
-                          ? 'ml-auto border-2 border-(--border-accent) bg-(--accent-primary-muted) text-(--text-primary)'
-                          : 'mr-auto border border-(--border-default) bg-(--bg-surface-elevated) text-(--accent-primary)'
+                          ? 'ml-auto border border-transparent bg-(--state-success) text-(--bg-base)'
+                          : 'mr-auto border border-(--border-default) bg-(--bg-surface-elevated) text-(--text-primary)'
                       )}
                       key={message.id}
                     >
-                      {message.content}
+                      <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-(--text-muted)">
+                        <span className="truncate">{message.sender}</span>
+                        <span>{formatMessageTime(message.timestamp, message.createdAt)}</span>
+                      </div>
+                      <p>{message.content}</p>
                     </div>
                   ))}
                 </div>
@@ -246,9 +449,16 @@ export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarPr
             </div>
 
             <div className="border-t border-(--border-default) bg-(--bg-overlay) p-4">
+              {isRunActive ? (
+                <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-md border border-(--state-success) bg-(--state-success-muted) px-2.5 py-1 text-xs text-(--state-success)">
+                  <LoaderCircle className="size-3 animate-spin" />
+                  <span className="truncate">{sharedStatusText}</span>
+                </div>
+              ) : null}
               <div className="flex items-end gap-2">
                 <Textarea
                   className="max-h-40 min-h-[72px] resize-none border-(--border-default) bg-(--bg-subtle) text-(--text-primary) placeholder:text-(--text-muted) focus-visible:border-(--border-accent)"
+                  disabled={isComposerBusy}
                   onChange={handlePromptChange}
                   onKeyDown={handlePromptKeyDown}
                   placeholder="Ask Nexus AI to design a system..."
@@ -257,13 +467,15 @@ export function AiSidebar({ open, onOpenChange, projectId, roomId }: AiSidebarPr
                 />
                 <Button
                   aria-label="Send prompt"
-                  className="h-10 w-10 shrink-0 bg-(--accent-primary) text-(--text-primary) hover:bg-(--accent-primary-hover)"
-                  disabled={!prompt.trim() || isSubmitting}
-                  onClick={handleSubmit}
+                  className="h-10 w-10 shrink-0 bg-(--state-success) text-(--bg-base) hover:bg-(--state-success) disabled:opacity-50"
+                  disabled={!prompt.trim() || isComposerBusy}
+                  onClick={() => {
+                    void handleSubmit()
+                  }}
                   size="icon"
                   type="button"
                 >
-                  <Send className="size-4" />
+                  {isComposerBusy ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
                 </Button>
               </div>
             </div>

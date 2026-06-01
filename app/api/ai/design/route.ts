@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tasks } from "@trigger.dev/sdk/v3";
+import { auth as triggerAuth, tasks } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 import { getCurrentClerkIdentity } from "@/lib/project-access";
@@ -64,26 +64,34 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   try {
+    let publicToken: string | undefined;
+
+    try {
+      publicToken = await triggerAuth.createPublicToken({
+        scopes: {
+          read: {
+            tags: `project:${projectId}`,
+          },
+        },
+      });
+    } catch (error) {
+      console.warn("Failed to create tag-scoped design token.", error);
+    }
+
     const runHandle = await tasks.trigger<typeof designAgent>("design-agent", {
       prompt,
       roomId,
-    });
-
-    await prisma.taskRun.create({
-      data: {
-        runId: runHandle.id,
-        projectId,
-        userId: identity.userId,
-      },
-      select: {
-        id: true,
-      },
+      projectId,
+      userId: identity.userId,
+    }, {
+      tags: [`project:${projectId}`],
     });
 
     return NextResponse.json(
       {
         data: {
           runId: runHandle.id,
+          publicToken,
         },
       },
       { status: 202 }

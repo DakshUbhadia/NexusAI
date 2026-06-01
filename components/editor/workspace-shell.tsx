@@ -24,6 +24,7 @@ import {
 import { AiSidebar } from '@/components/editor/ai-sidebar'
 import { CollaborativeCanvas } from '@/components/editor/canvas/collaborative-canvas'
 import { ProjectSidebar } from '@/components/editor/project-sidebar'
+import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,7 @@ import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplate, CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
 interface WorkspaceShellProps extends EditorProjectLists {
+  readonly currentProjectId: string
   readonly currentRoomId: string
   readonly projectName: string
 }
@@ -63,9 +65,9 @@ function getSaveButtonLabel(status: CanvasSaveStatus, errorMessage: string | nul
 }
 
 export function WorkspaceShell(props: WorkspaceShellProps) {
-  const { currentRoomId, projectName, ownedProjects, sharedProjects } = props
+  const { currentProjectId, currentRoomId, projectName, ownedProjects, sharedProjects } = props
   const router = useRouter()
-  const projectActions = useProjectActions({ activeProjectId: currentRoomId })
+  const projectActions = useProjectActions({ activeProjectId: currentProjectId })
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false)
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
   const [canvasSaveNow, setCanvasSaveNow] = useState<(() => Promise<void>) | null>(null)
@@ -84,7 +86,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
     projectActions.dialogState.type === 'delete'
       ? ownedProjects.find((project) => project.id === projectActions.dialogState.projectId)
       : undefined
-  const isOwner = ownedProjects.some((project) => project.id === currentRoomId)
+  const isOwner = ownedProjects.some((project) => project.id === currentProjectId)
   const handleTemplateImport = (template: CanvasTemplate): void => {
     setTemplateImportRequest((current) => ({
       requestId: (current?.requestId ?? 0) + 1,
@@ -164,7 +166,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
           <div className="flex h-[calc(100dvh-var(--topbar-height))] min-h-0">
             {projectSidebarOpen ? (
               <ProjectSidebar
-                activeProjectId={currentRoomId}
+                activeProjectId={currentProjectId}
                 isOpen={true}
                 mode="docked"
                 onClose={() => setProjectSidebarOpen(false)}
@@ -178,21 +180,23 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               />
             ) : null}
 
-            <section className="relative flex min-w-0 flex-1 overflow-hidden bg-(--bg-base)">
-              <CollaborativeCanvas
-                onSaveErrorMessageChange={setCanvasSaveErrorMessage}
-                onSaveNowChange={(saveNow) => setCanvasSaveNow(() => saveNow)}
-                onSaveStatusChange={setCanvasSaveStatus}
+            <LiveblocksRoomProvider roomId={currentRoomId}>
+              <section className="relative flex min-w-0 flex-1 overflow-hidden bg-(--bg-base)">
+                <CollaborativeCanvas
+                  projectId={currentProjectId}
+                  onSaveErrorMessageChange={setCanvasSaveErrorMessage}
+                  onSaveNowChange={(saveNow) => setCanvasSaveNow(() => saveNow)}
+                  onSaveStatusChange={setCanvasSaveStatus}
+                  templateImportRequest={templateImportRequest}
+                />
+              </section>
+              <AiSidebar
+                projectId={currentProjectId}
                 roomId={currentRoomId}
-                templateImportRequest={templateImportRequest}
+                onOpenChange={setAiSidebarOpen}
+                open={aiSidebarOpen}
               />
-            </section>
-            <AiSidebar
-              onOpenChange={setAiSidebarOpen}
-              open={aiSidebarOpen}
-              projectId={currentRoomId}
-              roomId={currentRoomId}
-            />
+            </LiveblocksRoomProvider>
           </div>
         </main>
       </div>
@@ -247,7 +251,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         isOwner={isOwner}
         onOpenChange={setShareDialogOpen}
         open={shareDialogOpen}
-        projectId={currentRoomId}
+        projectId={currentProjectId}
         projectName={projectName}
       />
 

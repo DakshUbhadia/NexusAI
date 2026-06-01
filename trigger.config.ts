@@ -1,4 +1,4 @@
-import { defineConfig } from "@trigger.dev/sdk/v3";
+import { defineConfig } from "@trigger.dev/sdk";
 import { config as loadEnv } from "dotenv";
 
 // Trigger CLI can evaluate this file before Next.js env loading.

@@ -117,6 +117,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
   const textClass = colorPair.textClass
   const placeholderClass = cn(textClass, 'opacity-70')
   const isActiveColor = (value: CanvasNodeColorKey): boolean => value === colorKey
+  const isSectionHeader = id.startsWith('section-')
 
   useEffect(() => {
     if (!isEditing) {
@@ -225,7 +226,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
         >
           <span
             className={cn(
-              'block truncate',
+              'block whitespace-normal break-words leading-tight',
               data.label.trim().length > 0 ? textClass : placeholderClass
             )}
           >
@@ -236,7 +237,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
     </div>
   )
 
-  const colorToolbar = selected ? (
+  const colorToolbar = selected && !isSectionHeader ? (
     <div className="nodrag nopan nowheel absolute left-1/2 top-0 z-30 -translate-x-1/2 -translate-y-10">
       <div className="flex items-center gap-2 rounded-lg border border-(--border-default) bg-(--bg-overlay) px-2 py-1 shadow-(--shadow-md) backdrop-blur">
         {(Object.keys(CANVAS_COLOR_PALETTE) as CanvasNodeColorKey[]).map((key) => {
@@ -270,7 +271,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
     </div>
   ) : null
 
-  const resizeHandleElement = selected ? (
+  const resizeHandleElement = selected && !isSectionHeader ? (
     <button
       type="button"
       className="absolute right-0 bottom-0 z-40 translate-x-1/2 translate-y-1/2"
@@ -285,7 +286,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
   if (data.shape === 'rectangle') {
     return (
       <div ref={rootRef} className="relative inline-flex">
-        <ConnectionDots />
+        {isSectionHeader ? null : <ConnectionDots />}
         {colorToolbar}
         {resizeHandleElement}
         <svg aria-hidden="true" className="overflow-visible drop-shadow-(--shadow-md)" height={resolvedHeight} width={resolvedWidth}>
@@ -302,7 +303,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
 
     return (
       <div ref={rootRef} className="relative inline-flex">
-        <ConnectionDots />
+        {isSectionHeader ? null : <ConnectionDots />}
         {colorToolbar}
         {resizeHandleElement}
         <svg aria-hidden="true" className="overflow-visible drop-shadow-(--shadow-md)" height={resolvedHeight} width={resolvedWidth}>
@@ -321,7 +322,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
   if (data.shape === 'circle') {
     return (
       <div ref={rootRef} className="relative inline-flex">
-        <ConnectionDots />
+        {isSectionHeader ? null : <ConnectionDots />}
         {colorToolbar}
         {resizeHandleElement}
         <svg aria-hidden="true" className="overflow-visible drop-shadow-(--shadow-md)" height={resolvedHeight} width={resolvedWidth}>
@@ -343,7 +344,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
   if (data.shape === 'pill') {
     return (
       <div ref={rootRef} className="relative inline-flex">
-        <ConnectionDots />
+        {isSectionHeader ? null : <ConnectionDots />}
         {colorToolbar}
         {resizeHandleElement}
         <svg aria-hidden="true" className="overflow-visible drop-shadow-(--shadow-md)" height={resolvedHeight} width={resolvedWidth}>
@@ -364,7 +365,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
 
     return (
       <div ref={rootRef} className="relative inline-flex">
-        <ConnectionDots />
+        {isSectionHeader ? null : <ConnectionDots />}
         {colorToolbar}
         {resizeHandleElement}
         <svg aria-hidden="true" className="overflow-visible drop-shadow-(--shadow-md)" height={resolvedHeight} width={resolvedWidth}>
@@ -386,7 +387,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
 
     return (
       <div ref={rootRef} className="relative inline-flex">
-        <ConnectionDots />
+        {isSectionHeader ? null : <ConnectionDots />}
         {colorToolbar}
         {resizeHandleElement}
         <svg aria-hidden="true" className="overflow-visible drop-shadow-(--shadow-md)" height={resolvedHeight} width={resolvedWidth}>
@@ -409,7 +410,7 @@ export function CanvasNodeRenderer({ id, data, selected }: NodeProps<CanvasNode>
         selected ? 'border-(--border-accent) shadow-(--shadow-glow-cyan)' : 'border-(--border-default)'
       )}
     >
-      <ConnectionDots />
+      {isSectionHeader ? null : <ConnectionDots />}
       {colorToolbar}
       {resizeHandleElement}
       {labelOverlay}

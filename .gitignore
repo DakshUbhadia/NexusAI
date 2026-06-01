@@ -11,14 +11,15 @@
 !.yarn/versions
 .agents/
 context/
+.claude
+.gemini
+.github
+.vscode
+.trigger
 AGENTS.md
 CLAUDE.md
 GEMINI.md
-.gemini
-.trigger
-.claude
-.github
-.vscode
+
 # testing
 /coverage
 
