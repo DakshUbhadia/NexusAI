@@ -2,7 +2,7 @@
 
 import { memo } from 'react'
 
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from '@xyflow/react'
 
 import { cn } from '@/lib/utils'
 import type { CanvasEdge } from '@/types/canvas'
@@ -14,13 +14,15 @@ function resolveEdgeLabel(edgeData: CanvasEdge['data']): string {
 function CanvasEdgeRendererComponent(props: EdgeProps<CanvasEdge>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, selected, data } = props
   const resolvedLabel = resolveEdgeLabel(data)
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: 14,
+    offset: 32,
   })
 
   return (

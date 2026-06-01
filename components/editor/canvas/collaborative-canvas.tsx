@@ -8,7 +8,6 @@ import { ClientSideSuspense } from '@liveblocks/react'
 
 import { CanvasError } from '@/components/editor/canvas/canvas-error'
 import { CanvasLoading } from '@/components/editor/canvas/canvas-loading'
-import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
 import type { CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 
@@ -17,7 +16,7 @@ const FlowCanvas = dynamic(() => import('./flow/flow-canvas').then((mod) => mod.
 })
 
 interface CollaborativeCanvasProps {
-  readonly roomId: string
+  readonly projectId: string
   readonly templateImportRequest?: CanvasTemplateImportRequest | null
   readonly onSaveNowChange?: (saveNow: (() => Promise<void>) | null) => void
   readonly onSaveErrorMessageChange?: (message: string | null) => void
@@ -56,7 +55,7 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, CanvasErro
 }
 
 export function CollaborativeCanvas({
-  roomId,
+  projectId,
   onSaveErrorMessageChange,
   onSaveNowChange,
   onSaveStatusChange,
@@ -71,17 +70,16 @@ export function CollaborativeCanvas({
   return (
     <div className="relative h-full w-full overflow-hidden bg-(--bg-base)">
       <CanvasErrorBoundary onRetry={handleRetry}>
-        <LiveblocksRoomProvider key={retryKey} roomId={roomId}>
-          <ClientSideSuspense fallback={<CanvasLoading />}>
-            <FlowCanvas
-              onSaveErrorMessageChange={onSaveErrorMessageChange}
-              onSaveNowChange={onSaveNowChange}
-              onSaveStatusChange={onSaveStatusChange}
-              projectId={roomId}
-              templateImportRequest={templateImportRequest}
-            />
-          </ClientSideSuspense>
-        </LiveblocksRoomProvider>
+        <ClientSideSuspense fallback={<CanvasLoading />}>
+          <FlowCanvas
+            key={retryKey}
+            onSaveErrorMessageChange={onSaveErrorMessageChange}
+            onSaveNowChange={onSaveNowChange}
+            onSaveStatusChange={onSaveStatusChange}
+            projectId={projectId}
+            templateImportRequest={templateImportRequest}
+          />
+        </ClientSideSuspense>
       </CanvasErrorBoundary>
     </div>
   )

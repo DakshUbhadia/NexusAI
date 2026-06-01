@@ -4,6 +4,7 @@ import { useMemo, type CSSProperties, type ReactElement } from 'react'
 
 import { UserButton, useAuth } from '@clerk/nextjs'
 import { useOthers } from '@liveblocks/react'
+import { LoaderCircle } from 'lucide-react'
 import { Panel, useStore } from '@xyflow/react'
 
 const MAX_VISIBLE_AVATARS = 5
@@ -205,10 +206,11 @@ export function PresenceOverlay(): ReactElement {
                   />
                 </svg>
                 <div
-                  className="max-w-40 truncate rounded-full border px-2 py-1 text-xs font-medium text-(--text-inverted) shadow-(--shadow-sm)"
+                  className="flex max-w-40 items-center gap-1.5 truncate rounded-full border px-2 py-1 text-xs font-medium text-(--text-inverted) shadow-(--shadow-sm)"
                   style={badgeStyle}
                 >
-                  {cursor.thinking ? `${cursor.name} • thinking` : cursor.name}
+                  <span className="truncate">{cursor.name}</span>
+                  {cursor.thinking ? <LoaderCircle className="size-3 shrink-0 animate-spin" /> : null}
                 </div>
               </div>
             </div>

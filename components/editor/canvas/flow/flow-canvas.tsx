@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 
 import {
+  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
   Background,
   ConnectionMode,
+  type Connection,
   MarkerType,
   Panel,
   ReactFlow,
@@ -19,13 +23,13 @@ import { Check, PencilLine, Trash2, X } from 'lucide-react'
 import {
   useCanRedo,
   useCanUndo,
-  useEventListener,
   useHistory,
+  useMutation,
   useRedo,
+  useStorage,
   useUndo,
   useUpdateMyPresence,
-} from '@liveblocks/react'
-import { useLiveblocksFlow } from '@liveblocks/react-flow'
+} from '@liveblocks/react/suspense'
 
 import { CanvasEdgeRenderer } from '@/components/editor/canvas/edges/canvas-edge'
 import { CanvasNodeRenderer } from '@/components/editor/canvas/nodes/canvas-node'
@@ -89,13 +93,58 @@ type EdgeLabelEditorState = EdgeActionMenuState & {
   readonly draft: string
 }
 
-type AiStatusItem = {
-  readonly id: string
-  readonly phase: 'start' | 'processing' | 'complete' | 'error'
-  readonly message: string
-  readonly runId: string
-  readonly step: number
-  readonly totalSteps: number
+type FlowStorageRoot = {
+  get: (key: string) => unknown
+  set: (key: string, value: unknown) => void
+}
+
+function toPlainFlow(candidate: unknown): CanvasFlow {
+  const maybeToJson = candidate as { toJSON?: () => unknown } | null
+  const raw = maybeToJson && typeof maybeToJson.toJSON === 'function' ? maybeToJson.toJSON() : candidate
+  const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+
+  const normalizeCollection = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) {
+      return value
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.values(value as Record<string, unknown>)
+    }
+
+    return []
+  }
+
+  const parsed = canvasFlowSchema.safeParse({
+    nodes: normalizeCollection(record?.nodes),
+    edges: normalizeCollection(record?.edges),
+  })
+
+  if (!parsed.success) {
+    return {
+      nodes: [],
+      edges: [],
+    }
+  }
+
+  return parsed.data
+}
+
+function isCanonicalFlowShape(candidate: unknown): boolean {
+  const maybeToJson = candidate as { toJSON?: () => unknown } | null
+  const raw = maybeToJson && typeof maybeToJson.toJSON === 'function' ? maybeToJson.toJSON() : candidate
+  return canvasFlowSchema.safeParse(raw).success
+}
+
+function readFlowFromStorage(storage: FlowStorageRoot): CanvasFlow {
+  return toPlainFlow(storage.get('flow'))
+}
+
+function writeFlowToStorage(storage: FlowStorageRoot, flow: CanvasFlow): void {
+  storage.set('flow', {
+    nodes: flow.nodes,
+    edges: flow.edges,
+  })
 }
 
 function cloneTemplateNode(node: CanvasNode): CanvasNode {
@@ -197,7 +246,6 @@ function FlowCanvasInner({
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null)
   const [edgeActionMenu, setEdgeActionMenu] = useState<EdgeActionMenuState | null>(null)
   const [edgeLabelEditor, setEdgeLabelEditor] = useState<EdgeLabelEditorState | null>(null)
-  const [aiStatusFeed, setAiStatusFeed] = useState<AiStatusItem[]>([])
   const hasFitViewRef = useRef(false)
   const loadAttemptedRef = useRef(false)
   const lastTemplateImportRequestRef = useRef<number | null>(null)
@@ -218,19 +266,74 @@ function FlowCanvasInner({
     }),
     []
   )
+  const storageFlow = useStorage((root) => root.flow)
+  const flow = useMemo(() => toPlainFlow(storageFlow), [storageFlow])
+  const nodes = flow.nodes
+  const edges = flow.edges
+  const ensureFlowStorage = useMutation(({ storage }) => {
+    const currentFlow = storage.get('flow')
+    if (!currentFlow) {
+      writeFlowToStorage(storage as FlowStorageRoot, {
+        nodes: [],
+        edges: [],
+      })
+      return
+    }
 
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onDelete } = useLiveblocksFlow<
-    CanvasNode,
-    CanvasEdge
-  >({
-    nodes: {
-      initial: [],
-    },
-    edges: {
-      initial: [],
-    },
-    suspense: true,
-  })
+    // Backfill legacy or malformed room storage into the canonical flow shape.
+    if (!isCanonicalFlowShape(currentFlow)) {
+      writeFlowToStorage(storage as FlowStorageRoot, toPlainFlow(currentFlow))
+    }
+  }, [])
+  const replaceFlow = useMutation(({ storage }, flow: CanvasFlow) => {
+    writeFlowToStorage(storage as FlowStorageRoot, flow)
+  }, [])
+  const applyCanvasNodeChanges = useMutation(({ storage }, changes: NodeChange<CanvasNode>[]) => {
+    const currentFlow = readFlowFromStorage(storage as FlowStorageRoot)
+    const nextNodes = applyNodeChanges(changes, currentFlow.nodes)
+    writeFlowToStorage(storage as FlowStorageRoot, {
+      nodes: nextNodes,
+      edges: currentFlow.edges,
+    })
+  }, [])
+  const applyCanvasEdgeChanges = useMutation(({ storage }, changes: EdgeChange<CanvasEdge>[]) => {
+    const currentFlow = readFlowFromStorage(storage as FlowStorageRoot)
+    const nextEdges = applyEdgeChanges(changes, currentFlow.edges)
+    writeFlowToStorage(storage as FlowStorageRoot, {
+      nodes: currentFlow.nodes,
+      edges: nextEdges,
+    })
+  }, [])
+  const connectCanvasNodes = useMutation(({ storage }, connection: Connection) => {
+    const currentFlow = readFlowFromStorage(storage as FlowStorageRoot)
+    const nextEdges = addEdge(
+      {
+        ...connection,
+        type: 'canvasEdge',
+      },
+      currentFlow.edges
+    ) as CanvasEdge[]
+
+    writeFlowToStorage(storage as FlowStorageRoot, {
+      nodes: currentFlow.nodes,
+      edges: nextEdges,
+    })
+  }, [])
+  const deleteCanvasElements = useMutation(({ storage }, payload: { nodes: CanvasNode[]; edges: CanvasEdge[] }) => {
+    const currentFlow = readFlowFromStorage(storage as FlowStorageRoot)
+    const nodeIds = new Set(payload.nodes.map((node) => node.id))
+    const edgeIds = new Set(payload.edges.map((edge) => edge.id))
+
+    const nextNodes = currentFlow.nodes.filter((node) => !nodeIds.has(node.id))
+    const nextEdges = currentFlow.edges.filter(
+      (edge) => !edgeIds.has(edge.id) && !nodeIds.has(edge.source) && !nodeIds.has(edge.target)
+    )
+
+    writeFlowToStorage(storage as FlowStorageRoot, {
+      nodes: nextNodes,
+      edges: nextEdges,
+    })
+  }, [])
   const hasExistingCanvas = nodes.length > 0 || edges.length > 0
 
   const undo = useUndo()
@@ -249,31 +352,15 @@ function FlowCanvasInner({
     edgeActionMenu && edges.some((edge) => edge.id === edgeActionMenu.edgeId) ? edgeActionMenu : null
   const activeEdgeLabelEditor =
     edgeLabelEditor && edges.some((edge) => edge.id === edgeLabelEditor.edgeId) ? edgeLabelEditor : null
-  const latestStatus = aiStatusFeed[0] ?? null
-
-  useEventListener(({ event }) => {
-    if (event.type !== 'design-agent-status') {
-      return
-    }
-
-    setAiStatusFeed((current) => {
-      const nextItem: AiStatusItem = {
-        id: `${event.runId}:${event.step}:${event.timestamp}`,
-        phase: event.phase,
-        message: event.message,
-        runId: event.runId,
-        step: event.step,
-        totalSteps: event.totalSteps,
-      }
-
-      return [nextItem, ...current].slice(0, 6)
-    })
-  })
 
   useEffect(() => {
     latestEdgesRef.current = edges
     latestNodesRef.current = nodes
   }, [edges, nodes])
+
+  useEffect(() => {
+    ensureFlowStorage()
+  }, [ensureFlowStorage])
 
   useEffect(() => {
     if (!activeEdgeLabelEditor) {
@@ -367,9 +454,9 @@ function FlowCanvasInner({
       }
 
       const changes: NodeChange<CanvasNode>[] = [{ type: 'add', item: newNode }]
-      onNodesChange(changes)
+      applyCanvasNodeChanges(changes)
     },
-    [onNodesChange, reactFlow]
+    [applyCanvasNodeChanges, reactFlow]
   )
 
   useEffect(() => {
@@ -411,19 +498,10 @@ function FlowCanvasInner({
         }
 
         const savedCanvas: CanvasFlow = parsed.data
-        const nodeChanges: NodeChange<CanvasNode>[] = savedCanvas.nodes.map((node) => ({
-          type: 'add',
-          item: node,
-        }))
-        const edgeChanges: EdgeChange<CanvasEdge>[] = savedCanvas.edges.map((edge) => ({
-          type: 'add',
-          item: edge,
-        }))
 
         history.pause()
         try {
-          onNodesChange(nodeChanges)
-          onEdgesChange(edgeChanges)
+          replaceFlow(savedCanvas)
         } finally {
           history.resume()
         }
@@ -447,7 +525,7 @@ function FlowCanvasInner({
     return () => {
       cancelled = true
     }
-  }, [hasExistingCanvas, history, onEdgesChange, onNodesChange, projectId, reactFlow])
+  }, [hasExistingCanvas, history, projectId, reactFlow, replaceFlow])
 
   useEffect(() => {
     if (!activeEdgeActionMenu && !activeEdgeLabelEditor) {
@@ -546,9 +624,9 @@ function FlowCanvasInner({
         },
       ]
 
-      onEdgesChange(edgeChanges)
+      applyCanvasEdgeChanges(edgeChanges)
     },
-    [edges, onEdgesChange]
+    [applyCanvasEdgeChanges, edges]
   )
 
   const handleEdgeClick = useCallback(
@@ -601,8 +679,8 @@ function FlowCanvasInner({
 
     setEdgeActionMenu(null)
     setEdgeLabelEditor(null)
-    onDelete({ nodes: [], edges: [currentEdge] })
-  }, [activeEdgeActionMenu, edges, onDelete])
+    deleteCanvasElements({ nodes: [], edges: [currentEdge] })
+  }, [activeEdgeActionMenu, deleteCanvasElements, edges])
 
   const handleEdgeEditorConfirm = useCallback(() => {
     if (!activeEdgeLabelEditor) {
@@ -669,20 +747,14 @@ function FlowCanvasInner({
 
     const importedNodes = templateImportRequest.template.nodes.map(cloneTemplateNode)
     const importedEdges = templateImportRequest.template.edges.map(cloneTemplateEdge)
-    const nodeChanges: NodeChange<CanvasNode>[] = importedNodes.map((node) => ({
-      type: 'add',
-      item: node,
-    }))
-    const edgeChanges: EdgeChange<CanvasEdge>[] = importedEdges.map((edge) => ({
-      type: 'add',
-      item: edge,
-    }))
+    const nextFlow: CanvasFlow = {
+      nodes: importedNodes,
+      edges: importedEdges,
+    }
 
     history.pause()
     try {
-      onDelete({ nodes, edges })
-      onNodesChange(nodeChanges)
-      onEdgesChange(edgeChanges)
+      replaceFlow(nextFlow)
     } finally {
       history.resume()
     }
@@ -692,10 +764,10 @@ function FlowCanvasInner({
         reactFlow.fitView({ padding: 0.18, duration: 350 })
       })
     })
-  }, [edges, history, nodes, onDelete, onEdgesChange, onNodesChange, reactFlow, templateImportRequest])
+  }, [history, replaceFlow, reactFlow, templateImportRequest])
 
   const handleConnect = useCallback(
-    (params: Parameters<typeof onConnect>[0]) => {
+    (params: Connection) => {
       // Defensive validation of handle ids and roles
       const p = params as Record<string, unknown>
       const sourceHandle = typeof p.sourceHandle === 'string' ? p.sourceHandle : ''
@@ -712,24 +784,24 @@ function FlowCanvasInner({
 
       // If handles are swapped, normalize by swapping source/target
       if (isSourceHandle(sourceHandle) && isTargetHandle(targetHandle)) {
-        onConnect(params)
+        connectCanvasNodes(params)
         return
       }
 
       if (isSourceHandle(targetHandle) && isTargetHandle(sourceHandle) && sourceNode && targetNode) {
-        const swapped = {
+        const swapped: Connection = {
           source: targetNode,
           target: sourceNode,
           sourceHandle: targetHandle,
           targetHandle: sourceHandle,
         }
-        onConnect(swapped)
+        connectCanvasNodes(swapped)
         return
       }
 
       console.warn('Ignored connection: invalid handle role combination', params)
     },
-    [onConnect]
+    [connectCanvasNodes]
   )
 
   const handleZoomIn = useCallback(() => {
@@ -763,9 +835,9 @@ function FlowCanvasInner({
     for (const edge of connectedEdges) edgesToDeleteById.set(edge.id, edge)
     const edgesToDelete = Array.from(edgesToDeleteById.values())
 
-    onDelete({ nodes: selectedNodes, edges: edgesToDelete })
+    deleteCanvasElements({ nodes: selectedNodes, edges: edgesToDelete })
     closeEdgeOverlays()
-  }, [closeEdgeOverlays, reactFlow, edges, onDelete])
+  }, [closeEdgeOverlays, reactFlow, edges, deleteCanvasElements])
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -815,9 +887,9 @@ function FlowCanvasInner({
         },
       ]
 
-      onNodesChange(changes)
+      applyCanvasNodeChanges(changes)
     },
-    [nodes, onNodesChange]
+    [nodes, applyCanvasNodeChanges]
   )
 
   const handleLabelChange = useCallback(
@@ -842,9 +914,9 @@ function FlowCanvasInner({
         },
       ]
 
-      onNodesChange(changes)
+      applyCanvasNodeChanges(changes)
     },
-    [nodes, onNodesChange]
+    [nodes, applyCanvasNodeChanges]
   )
 
   const handleColorChange = useCallback(
@@ -869,9 +941,9 @@ function FlowCanvasInner({
         },
       ]
 
-      onNodesChange(changes)
+      applyCanvasNodeChanges(changes)
     },
-    [nodes, onNodesChange]
+    [nodes, applyCanvasNodeChanges]
   )
 
   const nodeEditingContextValue = useMemo(
@@ -915,7 +987,7 @@ function FlowCanvasInner({
           proOptions={{ hideAttribution: true }}
           onInit={handleInit}
           onConnect={handleConnect}
-          onDelete={onDelete}
+          onDelete={deleteCanvasElements}
           onPaneClick={closeEdgeOverlays}
           onNodeClick={closeEdgeOverlays}
           onEdgeClick={handleEdgeClick}
@@ -923,10 +995,10 @@ function FlowCanvasInner({
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
-          onEdgesChange={onEdgesChange}
+          onEdgesChange={applyCanvasEdgeChanges}
           onMouseLeave={handleMouseLeave}
           onMouseMove={handleMouseMove}
-          onNodesChange={onNodesChange}
+          onNodesChange={applyCanvasNodeChanges}
         >
           <Background {...flowBackgroundProps} />
           {dragPreview ? (
@@ -947,43 +1019,6 @@ function FlowCanvasInner({
             </ViewportPortal>
           ) : null}
           <PresenceOverlay />
-          {latestStatus ? (
-            <Panel position="top-left" className="top-4! left-4! m-0! w-88">
-              <div className="pointer-events-auto rounded-xl border border-(--border-default) bg-(--bg-overlay) p-3 shadow-(--shadow-md) backdrop-blur-xl">
-                <p className="text-xs font-semibold text-(--text-primary)">AI Activity</p>
-                <p className="mt-1 text-xs text-(--text-secondary)">
-                  {latestStatus.message}
-                </p>
-                <div className="mt-2 max-h-28 space-y-1.5 overflow-y-auto pr-1">
-                  {aiStatusFeed.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-start gap-2 rounded-md border border-(--border-subtle) bg-(--bg-surface-elevated) px-2 py-1.5"
-                    >
-                      <span
-                        className={cn(
-                          'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
-                          item.phase === 'complete'
-                            ? 'bg-(--state-success)'
-                            : item.phase === 'error'
-                              ? 'bg-(--state-error)'
-                              : item.phase === 'start'
-                                ? 'bg-(--accent-primary)'
-                                : 'bg-(--state-warning)'
-                        )}
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] text-(--text-primary)">{item.message}</p>
-                        <p className="text-[10px] text-(--text-muted)">
-                          {item.totalSteps > 0 ? `Step ${item.step}/${item.totalSteps}` : 'Preparing'}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Panel>
-          ) : null}
           <Panel position="bottom-center" className="bottom-6!">
             <div className="flex items-center gap-3">
               <CanvasControls

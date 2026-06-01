@@ -35,9 +35,12 @@ type ApiErrorPayload = {
 }
 
 function createSnapshot(nodes: readonly CanvasNode[], edges: readonly CanvasEdge[]): CanvasSnapshot {
+  const safeNodes = Array.isArray(nodes) ? nodes : []
+  const safeEdges = Array.isArray(edges) ? edges : []
+
   const flow: CanvasFlow = {
-    nodes: [...nodes],
-    edges: [...edges],
+    nodes: [...safeNodes],
+    edges: [...safeEdges],
   }
 
   return {

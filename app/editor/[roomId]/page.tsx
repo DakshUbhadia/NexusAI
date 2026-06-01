@@ -38,6 +38,7 @@ export default async function EditorWorkspacePage(props: EditorWorkspacePageProp
 
   return (
     <WorkspaceShell
+      currentProjectId={project.id}
       currentRoomId={roomId}
       ownedProjects={ownedProjects}
       projectName={project.name}

@@ -1,5 +1,5 @@
 import { auth as clerkAuth } from "@clerk/nextjs/server";
-import { auth as triggerAuth } from "@trigger.dev/sdk/v3";
+import { auth as triggerAuth } from "@trigger.dev/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const token = await triggerAuth.createPublicToken({
       scopes: {
         read: {
-          runs: taskRun.runId,
+          runs: [taskRun.runId],
         },
       },
     });
