@@ -38,9 +38,25 @@ const instantiate = () => {
   return new PrismaClient({ adapter })
 }
 
+function hasRequiredDelegates(client: PrismaClient): boolean {
+  const candidate = client as unknown as {
+    project?: { findMany?: unknown }
+    taskRun?: { findMany?: unknown }
+    projectSpec?: { findMany?: unknown }
+  }
+
+  return (
+    typeof candidate.project?.findMany === 'function' &&
+    typeof candidate.taskRun?.findMany === 'function' &&
+    typeof candidate.projectSpec?.findMany === 'function'
+  )
+}
+
 const prisma =
   (globalThis.__prismaClient !== undefined && process.env.NODE_ENV === 'development')
-    ? globalThis.__prismaClient
+    ? hasRequiredDelegates(globalThis.__prismaClient)
+      ? globalThis.__prismaClient
+      : instantiate()
     : instantiate()
 
 if (process.env.NODE_ENV === 'development') globalThis.__prismaClient = prisma

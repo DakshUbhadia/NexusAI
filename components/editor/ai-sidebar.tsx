@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactElement } from 'react'
 
 import { Bot, Download, FileText, LoaderCircle, Send, Sparkles, X } from 'lucide-react'
-import { useCreateFeed, useCreateFeedMessage, useFeedMessages, useSelf } from '@liveblocks/react'
+import { useCreateFeed, useCreateFeedMessage, useFeedMessages, useSelf, useStorage } from '@liveblocks/react'
 import { useRealtimeRun } from '@trigger.dev/react-hooks'
+import { useRouter } from 'next/navigation'
+import ReactMarkdown from 'react-markdown'
 
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { canvasFlowSchema, type CanvasFlow } from '@/types/canvas'
 import {
   AI_CHAT_FEED_ID,
   AI_STATUS_FEED_ID,
@@ -25,9 +30,16 @@ const starterPrompts = [
 
 type AiSidebarProps = {
   readonly projectId: string
+  readonly projectSpecs: readonly ProjectSpecListItem[]
   readonly roomId: string
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
+}
+
+type ProjectSpecListItem = {
+  readonly id: string
+  readonly createdAt: string
+  readonly filename: string
 }
 
 type ChatFeedMessage = {
@@ -57,7 +69,32 @@ function formatMessageTime(timestamp: string, createdAt: number): string {
   })
 }
 
+function formatSpecCreatedAt(createdAt: string): string {
+  const parsedDate = new Date(createdAt)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Unknown date'
+  }
+
+  return parsedDate.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function buildSpecDownloadUrl(projectId: string, specId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/specs/${encodeURIComponent(specId)}/download`
+}
+
 type ActiveRunState = {
+  readonly runId: string
+  readonly publicToken: string
+}
+
+type ActiveSpecRunState = {
   readonly runId: string
   readonly publicToken: string
 }
@@ -99,15 +136,54 @@ function getRunErrorMessage(runError: unknown): string | null {
   return typeof message === 'string' && message.trim().length > 0 ? message : null
 }
 
-export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarProps): ReactElement {
+function normalizeFlowSnapshot(candidate: unknown): CanvasFlow {
+  const normalizeCollection = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) {
+      return value
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.values(value as Record<string, unknown>)
+    }
+
+    return []
+  }
+
+  const record = candidate && typeof candidate === 'object' ? (candidate as Record<string, unknown>) : null
+  const parsed = canvasFlowSchema.safeParse({
+    nodes: normalizeCollection(record?.nodes),
+    edges: normalizeCollection(record?.edges),
+  })
+
+  if (!parsed.success) {
+    return {
+      nodes: [],
+      edges: [],
+    }
+  }
+
+  return parsed.data
+}
+
+export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange }: AiSidebarProps): ReactElement {
+  const router = useRouter()
   const [prompt, setPrompt] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [isSpecSubmitting, setIsSpecSubmitting] = useState(false)
+  const [specStatusMessage, setSpecStatusMessage] = useState<string | null>(null)
+  const [selectedSpec, setSelectedSpec] = useState<ProjectSpecListItem | null>(null)
+  const [selectedSpecContent, setSelectedSpecContent] = useState<string>('')
+  const [isSpecContentLoading, setIsSpecContentLoading] = useState(false)
+  const [specContentError, setSpecContentError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const processedRunIdsRef = useRef<Set<string>>(new Set())
+  const processedSpecRunIdsRef = useRef<Set<string>>(new Set())
   const [activeRun, setActiveRun] = useState<ActiveRunState | null>(null)
+  const [activeSpecRun, setActiveSpecRun] = useState<ActiveSpecRunState | null>(null)
   const createFeed = useCreateFeed()
   const createFeedMessage = useCreateFeedMessage()
   const self = useSelf((current) => current)
+  const storageFlow = useStorage((root) => root.flow)
   const { messages: feedMessages } = useFeedMessages(AI_STATUS_FEED_ID, {
     limit: 1,
   })
@@ -140,11 +216,17 @@ export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarPr
       })
       .filter((message): message is ChatFeedMessage => message !== null)
   }, [chatFeedMessages])
+  const canvasFlowForSpec = useMemo(() => normalizeFlowSnapshot(storageFlow), [storageFlow])
   const { run: realtimeRun, error: realtimeRunError } = useRealtimeRun(activeRun?.runId, {
     accessToken: activeRun?.publicToken,
     enabled: Boolean(activeRun?.runId && activeRun?.publicToken),
   })
+  const { run: realtimeSpecRun, error: realtimeSpecRunError } = useRealtimeRun(activeSpecRun?.runId, {
+    accessToken: activeSpecRun?.publicToken,
+    enabled: Boolean(activeSpecRun?.runId && activeSpecRun?.publicToken),
+  })
   const isRunActive = activeRun !== null && !(realtimeRun?.isCompleted ?? false)
+  const isSpecRunActive = activeSpecRun !== null && !(realtimeSpecRun?.isCompleted ?? false)
   const isComposerBusy = isSending || isRunActive
   const sharedStatusText = latestFeedStatus?.text ?? 'Nexus AI is working on your design...'
 
@@ -196,6 +278,33 @@ export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarPr
     [createFeedMessage]
   )
 
+  const handleSpecModalClose = useCallback(() => {
+    setSelectedSpec(null)
+    setSelectedSpecContent('')
+    setSpecContentError(null)
+    setIsSpecContentLoading(false)
+  }, [])
+
+  const handleSpecSelect = useCallback((spec: ProjectSpecListItem) => {
+    setSelectedSpec(spec)
+    setSelectedSpecContent('')
+    setSpecContentError(null)
+    setIsSpecContentLoading(true)
+  }, [])
+
+  const handleSpecDownload = useCallback(
+    (specId: string) => {
+      const downloadUrl = buildSpecDownloadUrl(projectId, specId)
+      const anchor = globalThis.document.createElement('a')
+      anchor.href = downloadUrl
+      anchor.rel = 'noopener'
+      globalThis.document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+    },
+    [projectId]
+  )
+
   useEffect(() => {
     let cancelled = false
 
@@ -219,6 +328,51 @@ export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarPr
       cancelled = true
     }
   }, [createFeed])
+
+  useEffect(() => {
+    if (!selectedSpec) {
+      return
+    }
+
+    const abortController = new AbortController()
+
+    const previewUrl = buildSpecDownloadUrl(projectId, selectedSpec.id)
+
+    async function loadSpecContent(): Promise<void> {
+      try {
+        const response = await fetch(previewUrl, {
+          method: 'GET',
+          signal: abortController.signal,
+        })
+
+        if (!response.ok) {
+          const errorPayload = (await response.json().catch(() => null)) as unknown
+          const message = readErrorMessage(errorPayload, 'Failed to load spec preview.')
+          throw new Error(message)
+        }
+
+        const markdown = await response.text()
+        setSelectedSpecContent(markdown)
+      } catch (error) {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        const message = error instanceof Error ? error.message : 'Failed to load spec preview.'
+        setSpecContentError(message)
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsSpecContentLoading(false)
+        }
+      }
+    }
+
+    void loadSpecContent()
+
+    return () => {
+      abortController.abort()
+    }
+  }, [projectId, selectedSpec])
 
   useEffect(() => {
     if (!activeRun || !realtimeRun || realtimeRun.id !== activeRun.runId || !realtimeRun.isCompleted) {
@@ -251,6 +405,41 @@ export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarPr
     setActiveRun(null)
     void sendAssistantMessage(`Nexus AI run monitoring failed: ${realtimeRunError.message}`)
   }, [activeRun, realtimeRunError, sendAssistantMessage])
+
+  useEffect(() => {
+    if (!activeSpecRun || !realtimeSpecRun || realtimeSpecRun.id !== activeSpecRun.runId || !realtimeSpecRun.isCompleted) {
+      return
+    }
+
+    if (processedSpecRunIdsRef.current.has(activeSpecRun.runId)) {
+      return
+    }
+
+    processedSpecRunIdsRef.current.add(activeSpecRun.runId)
+    setActiveSpecRun(null)
+
+    if (realtimeSpecRun.isSuccess) {
+      router.refresh()
+      return
+    }
+
+    const runErrorMessage = getRunErrorMessage(realtimeSpecRun.error)
+    if (runErrorMessage) {
+      console.warn(`Spec generation failed: ${runErrorMessage}`)
+    } else {
+      console.warn('Spec generation failed.')
+    }
+  }, [activeSpecRun, realtimeSpecRun, router])
+
+  useEffect(() => {
+    if (!activeSpecRun || !realtimeSpecRunError || processedSpecRunIdsRef.current.has(activeSpecRun.runId)) {
+      return
+    }
+
+    processedSpecRunIdsRef.current.add(activeSpecRun.runId)
+    setActiveSpecRun(null)
+    console.warn(`Spec run monitoring failed: ${realtimeSpecRunError.message}`)
+  }, [activeSpecRun, realtimeSpecRunError])
 
   const handleSubmit = useCallback(async () => {
     const trimmedPrompt = prompt.trim()
@@ -339,6 +528,83 @@ export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarPr
       setIsSending(false)
     }
   }, [createFeedMessage, currentSenderName, isComposerBusy, projectId, prompt, resizeTextarea, roomId, sendAssistantMessage])
+
+  const handleGenerateSpec = useCallback(async () => {
+    if (isSpecSubmitting || isSpecRunActive) {
+      return
+    }
+
+    setIsSpecSubmitting(true)
+    setSpecStatusMessage(null)
+
+    try {
+      const specResponse = await fetch('/api/ai/spec', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          chatHistory: chatMessages.map((message) => ({
+            sender: message.sender,
+            role: message.role,
+            content: message.content,
+            timestamp: message.timestamp,
+          })),
+          nodes: canvasFlowForSpec.nodes,
+          edges: canvasFlowForSpec.edges,
+        }),
+      })
+
+      const specPayload = (await specResponse.json().catch(() => null)) as unknown
+
+      if (!specResponse.ok) {
+        throw new Error(readErrorMessage(specPayload, 'Failed to start spec generation.'))
+      }
+
+      const specData = readDataObject(specPayload)
+      const runId = typeof specData?.runId === 'string' ? specData.runId : null
+
+      if (!runId) {
+        throw new Error('Spec run did not return a run ID.')
+      }
+
+      const tokenResponse = await fetch('/api/ai/spec/token', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          runId,
+        }),
+      })
+
+      const tokenPayload = (await tokenResponse.json().catch(() => null)) as unknown
+
+      if (!tokenResponse.ok) {
+        throw new Error(readErrorMessage(tokenPayload, 'Failed to create the spec run token.'))
+      }
+
+      const tokenData = readDataObject(tokenPayload)
+      const publicToken = typeof tokenData?.token === 'string' ? tokenData.token : null
+
+      if (!publicToken) {
+        throw new Error('Spec run token response was invalid.')
+      }
+
+      setActiveSpecRun({
+        runId,
+        publicToken,
+      })
+      setSpecStatusMessage('Spec generation started. Nexus AI is preparing your markdown spec...')
+    } catch (error) {
+      console.error('Failed to submit spec generation request.', error)
+      const message = error instanceof Error ? error.message : 'Failed to submit spec generation request.'
+      setSpecStatusMessage(message)
+    } finally {
+      setIsSpecSubmitting(false)
+    }
+  }, [canvasFlowForSpec.edges, canvasFlowForSpec.nodes, chatMessages, isSpecRunActive, isSpecSubmitting, roomId])
 
   const handlePromptKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -483,32 +749,142 @@ export function AiSidebar({ projectId, roomId, open, onOpenChange }: AiSidebarPr
         </TabsContent>
 
         <TabsContent className="min-h-0 flex-1 data-[state=inactive]:hidden" value="specs">
-          <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-4 py-4">
-            <Button className="w-full bg-(--accent-primary) text-(--text-primary) hover:bg-(--accent-primary-hover)" type="button">
-              <FileText className="size-4" />
+          <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-4">
+            <Button
+              className="w-full bg-(--accent-primary) text-(--text-primary) hover:bg-(--accent-primary-hover)"
+              disabled={isSpecSubmitting || isSpecRunActive}
+              onClick={() => {
+                void handleGenerateSpec()
+              }}
+              type="button"
+            >
+              {isSpecSubmitting || isSpecRunActive ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <FileText className="size-4" />
+              )}
               Generate Spec
             </Button>
 
-            <div className="rounded-lg border border-(--border-default) bg-(--bg-surface-elevated) p-4 shadow-(--shadow-md)">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-(--border-default) bg-(--bg-subtle)">
-                  <FileText className="size-4 text-(--accent-primary)" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-(--text-primary)">Architecture Spec Draft</p>
-                  <p className="mt-1 text-xs leading-relaxed text-(--text-secondary)">
-                    System blueprint, service boundaries, data flow, and implementation milestones will appear here.
-                  </p>
-                </div>
+            {specStatusMessage ? (
+              <div className="rounded-md border border-(--border-default) bg-(--bg-subtle) px-3 py-2 text-xs text-(--text-secondary)">
+                {specStatusMessage}
               </div>
-              <Button className="mt-4 w-full" disabled type="button" variant="outline">
-                <Download className="size-4" />
-                Download
-              </Button>
+            ) : null}
+
+            <div className="min-h-0 flex-1 rounded-lg border border-(--border-default) bg-(--bg-surface-elevated)">
+              {projectSpecs.length === 0 ? (
+                <div className="flex h-full items-center justify-center px-4 text-center text-xs text-(--text-secondary)">
+                  No generated specs yet.
+                </div>
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="flex flex-col gap-2 p-2">
+                    {projectSpecs.map((spec) => (
+                      <div
+                        className="flex items-center gap-2 rounded-md border border-(--border-default) bg-(--bg-subtle) p-2"
+                        key={spec.id}
+                      >
+                        <button
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => handleSpecSelect(spec)}
+                          type="button"
+                        >
+                          <p className="truncate text-sm font-medium text-(--text-primary)">{spec.filename}</p>
+                          <p className="mt-0.5 text-xs text-(--text-secondary)">{formatSpecCreatedAt(spec.createdAt)}</p>
+                        </button>
+                        <Button
+                          aria-label={`Download ${spec.filename}`}
+                          className="shrink-0"
+                          onClick={() => handleSpecDownload(spec.id)}
+                          size="icon"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Download className="size-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
             </div>
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            handleSpecModalClose()
+          }
+        }}
+        open={selectedSpec !== null}
+      >
+        <DialogContent className="max-w-[min(720px,calc(100%-2rem))] border border-(--border-default) bg-(--bg-surface-elevated) text-(--text-primary) sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="truncate text-(--text-primary)">{selectedSpec?.filename ?? 'Spec Preview'}</DialogTitle>
+            <DialogDescription className="text-(--text-secondary)">
+              {selectedSpec ? formatSpecCreatedAt(selectedSpec.createdAt) : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="h-[60dvh] rounded-md border border-(--border-default) bg-(--bg-surface) p-4">
+            {isSpecContentLoading ? (
+              <div className="flex h-full items-center justify-center gap-2 text-sm text-(--text-secondary)">
+                <LoaderCircle className="size-4 animate-spin" />
+                <span>Loading spec preview...</span>
+              </div>
+            ) : specContentError ? (
+              <div className="flex h-full items-center justify-center text-sm text-(--state-error)">{specContentError}</div>
+            ) : (
+              <div className="space-y-4 text-sm leading-relaxed text-(--text-primary)">
+                <ReactMarkdown
+                  components={{
+                    h1: ({ ...props }) => <h1 className="text-xl font-semibold text-(--accent-primary)" {...props} />,
+                    h2: ({ ...props }) => <h2 className="text-lg font-semibold text-(--accent-primary)" {...props} />,
+                    h3: ({ ...props }) => <h3 className="text-base font-semibold text-(--text-primary)" {...props} />,
+                    p: ({ ...props }) => <p className="text-sm text-(--text-primary)" {...props} />,
+                    ul: ({ ...props }) => <ul className="list-disc space-y-1 pl-5 text-sm text-(--text-primary)" {...props} />,
+                    ol: ({ ...props }) => <ol className="list-decimal space-y-1 pl-5 text-sm text-(--text-primary)" {...props} />,
+                    li: ({ ...props }) => <li className="text-sm text-(--text-primary)" {...props} />,
+                    code: ({ ...props }) => (
+                      <code className="rounded-sm bg-(--bg-subtle) px-1 py-0.5 font-mono text-xs text-(--text-primary)" {...props} />
+                    ),
+                    pre: ({ ...props }) => (
+                      <pre className="overflow-x-auto rounded-md border border-(--border-default) bg-(--bg-subtle) p-3 font-mono text-xs text-(--text-primary)" {...props} />
+                    ),
+                    a: ({ ...props }) => <a className="text-(--accent-primary) underline underline-offset-2" {...props} />,
+                    blockquote: ({ ...props }) => (
+                      <blockquote className="border-l-2 border-(--border-accent) pl-3 text-(--text-secondary)" {...props} />
+                    ),
+                  }}
+                >
+                  {selectedSpecContent}
+                </ReactMarkdown>
+              </div>
+            )}
+          </ScrollArea>
+
+          <DialogFooter className="border-(--border-default) bg-(--bg-overlay)">
+            <Button
+              onClick={() => {
+                if (selectedSpec) {
+                  handleSpecDownload(selectedSpec.id)
+                }
+              }}
+              type="button"
+              variant="outline"
+            >
+              <Download className="size-4" />
+              Download
+            </Button>
+            <Button onClick={handleSpecModalClose} type="button" variant="outline">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   )
 }
