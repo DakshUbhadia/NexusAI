@@ -38,6 +38,11 @@ interface WorkspaceShellProps extends EditorProjectLists {
   readonly currentProjectId: string
   readonly currentRoomId: string
   readonly projectName: string
+  readonly projectSpecs: readonly {
+    id: string
+    createdAt: string
+    filename: string
+  }[]
 }
 
 function findOwnedProject(projectId: string | undefined, ownedProjects: readonly { id: string; name: string }[]) {
@@ -65,7 +70,7 @@ function getSaveButtonLabel(status: CanvasSaveStatus, errorMessage: string | nul
 }
 
 export function WorkspaceShell(props: WorkspaceShellProps) {
-  const { currentProjectId, currentRoomId, projectName, ownedProjects, sharedProjects } = props
+  const { currentProjectId, currentRoomId, projectName, ownedProjects, projectSpecs, sharedProjects } = props
   const router = useRouter()
   const projectActions = useProjectActions({ activeProjectId: currentProjectId })
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false)
@@ -192,6 +197,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               </section>
               <AiSidebar
                 projectId={currentProjectId}
+                projectSpecs={projectSpecs}
                 roomId={currentRoomId}
                 onOpenChange={setAiSidebarOpen}
                 open={aiSidebarOpen}
