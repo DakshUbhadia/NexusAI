@@ -1,15 +1,34 @@
 'use client'
 
-import { useEffect } from 'react'
-
-import { PencilLine, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ComponentType } from 'react'
+import {
+  motion,
+  AnimatePresence,
+  useReducedMotion,
+  type Variants,
+} from 'framer-motion'
+import {
+  FolderOpen,
+  LayoutGrid,
+  PencilLine,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  Users,
+  X,
+  Command,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { EditorProject } from '@/lib/editor-projects'
+import type { CollaboratorProfile } from '@/types/collaborators'
 
 type ProjectSidebarMode = 'overlay' | 'docked'
+type ProjectTab = 'my-projects' | 'shared'
 
 interface ProjectSidebarProps {
   readonly isOpen: boolean
@@ -26,6 +45,71 @@ interface ProjectSidebarProps {
   readonly className?: string
 }
 
+// --- Motion Variants ---
+
+const sidebarVariants: Variants = {
+  dockedHidden: {
+    width: 0,
+    opacity: 0,
+    marginLeft: 0,
+    marginRight: 0,
+    transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
+  },
+  dockedVisible: {
+    width: '22rem',
+    opacity: 1,
+    marginLeft: '0.75rem',
+    marginRight: '0.75rem',
+    transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
+  },
+  overlayHidden: {
+    x: '-100%',
+    opacity: 0,
+    transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
+  },
+  overlayVisible: {
+    x: 0,
+    opacity: 1,
+    transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
+  },
+}
+
+const backdropVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.22, ease: 'easeOut' } },
+  exit: { opacity: 0, transition: { duration: 0.18, ease: 'easeIn' } },
+}
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.045, delayChildren: 0.05 },
+  },
+  exit: {
+    opacity: 0,
+    transition: { staggerChildren: 0.02, staggerDirection: -1 },
+  },
+}
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 10, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 280, damping: 24 },
+  },
+  exit: {
+    opacity: 0,
+    y: -6,
+    scale: 0.96,
+    transition: { duration: 0.15, ease: 'easeIn' },
+  },
+}
+
+// --- Root Component ---
+
 export function ProjectSidebar(props: ProjectSidebarProps) {
   const {
     isOpen,
@@ -41,104 +125,163 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
     showCloseButton,
     className,
   } = props
+
   const isDocked = mode === 'docked'
   const canClose = showCloseButton ?? !isDocked
+  // FIX [sidebar L154]: useReducedMotion kept for future use — consumed directly where needed
+  useReducedMotion()
 
+  // Escape key handler
   useEffect(() => {
-    if (!isOpen || isDocked) {
-      return
+    if (!isOpen || isDocked) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
     }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, isDocked, onClose])
 
+  // Scroll-lock on overlay mode
   useEffect(() => {
-    if (isDocked) {
-      return
-    }
-
+    if (isDocked) return
+    const prev = document.body.style.overflow
     document.body.style.overflow = isOpen ? 'hidden' : ''
-
-    return () => {
-      document.body.style.overflow = ''
-    }
+    return () => { document.body.style.overflow = prev }
   }, [isOpen, isDocked])
 
-  const isVisible = isDocked || isOpen
+  const totalProjects = ownedProjects.length + sharedProjects.length
+  const activeOwnedCount = ownedProjects.filter((p) => p.id === activeProjectId).length
 
   return (
     <>
-      {!isDocked && isOpen ? (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 z-40 bg-(--bg-overlay) transition-opacity duration-200"
-          onClick={onClose}
-        />
-      ) : null}
-
-      <aside
-        className={cn(
-          'flex h-full flex-col bg-(--bg-surface) border-r border-(--border-default)',
-          isDocked
-            ? 'relative w-(--sidebar-width) shrink-0'
-            : 'fixed bottom-0 left-0 top-0 z-50 w-60 shadow-lg transition-transform duration-300 ease-out',
-          isDocked || isVisible ? 'translate-x-0' : '-translate-x-full',
-          className
+      {/* Backdrop */}
+      <AnimatePresence>
+        {!isDocked && isOpen && (
+          <motion.div
+            key="sidebar-backdrop"
+            variants={backdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-zinc-950/50 backdrop-blur-[3px]"
+            onClick={onClose}
+          />
         )}
-      >
-        <SidebarHeader onClose={onClose} showCloseButton={canClose} />
-        <SidebarTabs
-          activeProjectId={activeProjectId}
-          onDeleteProject={onDeleteProject}
-          onOpenProject={onOpenProject}
-          onRenameProject={onRenameProject}
-          ownedProjects={ownedProjects}
-          sharedProjects={sharedProjects}
-        />
-        <SidebarFooter onCreateProject={onCreateProject} />
-      </aside>
+      </AnimatePresence>
+
+      {/* Sidebar Panel */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.aside
+            key="project-sidebar"
+            role="complementary"
+            aria-label="Projects sidebar"
+            initial={isDocked ? 'dockedHidden' : 'overlayHidden'}
+            animate={isDocked ? 'dockedVisible' : 'overlayVisible'}
+            exit={isDocked ? 'dockedHidden' : 'overlayHidden'}
+            variants={sidebarVariants}
+            className={cn(
+              'flex flex-col overflow-hidden',
+              'rounded-2xl border border-zinc-800/40 bg-zinc-950/95 text-zinc-100 shadow-[0_24px_60px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl',
+              isDocked
+                ? 'relative shrink-0 h-[calc(100%-1.5rem)] my-3'
+                : 'fixed bottom-3 left-3 top-3 z-50 h-[calc(100%-1.5rem)] w-88',
+              className
+            )}
+          >
+            {/* Atmospheric top-glow — FIX [sidebar L201]: bg-gradient-to-r → bg-linear-to-r */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-indigo-500/30 to-transparent"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute left-0 top-0 h-48 w-full bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.06),transparent_65%)]"
+            />
+
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+              <SidebarHeader
+                activeCount={activeOwnedCount}
+                onClose={onClose}
+                projectCount={totalProjects}
+                showCloseButton={canClose}
+              />
+              <SidebarTabs
+                activeProjectId={activeProjectId}
+                onDeleteProject={onDeleteProject}
+                onOpenProject={onOpenProject}
+                onRenameProject={onRenameProject}
+                ownedProjects={ownedProjects}
+                sharedProjects={sharedProjects}
+              />
+              <SidebarFooter onCreateProject={onCreateProject} />
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
     </>
   )
 }
 
+// --- Sidebar Header ---
+
 interface SidebarHeaderProps {
   readonly onClose: () => void
   readonly showCloseButton: boolean
+  readonly projectCount: number
+  readonly activeCount: number
 }
 
-export function SidebarHeader({ onClose, showCloseButton }: Readonly<SidebarHeaderProps>) {
+export function SidebarHeader({ onClose, showCloseButton, projectCount, activeCount }: SidebarHeaderProps) {
   return (
-    <div
-      className={cn(
-        'flex h-14 items-center justify-between',
-        'border-b border-(--border-default) bg-[linear-gradient(90deg,var(--accent-primary-muted),transparent_62%)]',
-        'px-4'
-      )}
-    >
-      <h2 className="text-sm font-semibold text-(--text-primary)">Projects</h2>
-      {showCloseButton ? (
-        <Button
-          aria-label="Close sidebar"
-          className="transition-opacity duration-200 hover:bg-(--accent-primary-muted)"
-          onClick={onClose}
-          size="icon"
-          variant="ghost"
-        >
-          <X className="size-4" />
-        </Button>
-      ) : (
-        <div className="h-8 w-8" />
-      )}
+    <div className="shrink-0 border-b border-zinc-800/50 px-4 pt-4 pb-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2.5 inline-flex items-center gap-1.5 rounded-full border border-zinc-800/70 bg-zinc-900/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            <Sparkles className="size-2.5 text-indigo-400" aria-hidden="true" />
+            <span>Workspace</span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-[1.15rem] font-semibold tracking-tight text-zinc-100 leading-none">
+              Projects
+            </h2>
+            <motion.span
+              key={projectCount}
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 22 }}
+              className="inline-flex items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs font-medium tabular-nums text-zinc-400"
+            >
+              {projectCount}
+            </motion.span>
+          </div>
+
+          <p className="mt-1.5 text-xs text-zinc-600 leading-none">
+            {activeCount > 0
+              ? `${activeCount} active`
+              : 'Open, organize, and collaborate.'}
+          </p>
+        </div>
+
+        {showCloseButton && (
+          <Button
+            aria-label="Close sidebar"
+            className="size-8 shrink-0 rounded-xl border border-zinc-800/70 bg-zinc-900/40 text-zinc-500 shadow-none transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-0"
+            onClick={onClose}
+            size="icon"
+            variant="ghost"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
+
+// --- Sidebar Tabs ---
 
 interface SidebarTabsProps {
   readonly ownedProjects: readonly EditorProject[]
@@ -150,64 +293,222 @@ interface SidebarTabsProps {
 }
 
 function SidebarTabs(props: SidebarTabsProps) {
-  const {
-    ownedProjects,
-    sharedProjects,
-    activeProjectId,
-    onOpenProject,
-    onRenameProject,
-    onDeleteProject,
-  } = props
+  const { ownedProjects, sharedProjects, activeProjectId, onOpenProject, onRenameProject, onDeleteProject } = props
+  const [query, setQuery] = useState('')
+  const [tab, setTab] = useState<ProjectTab>('my-projects')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredOwned = useMemo(() => filterProjects(ownedProjects, normalizedQuery), [ownedProjects, normalizedQuery])
+  const filteredShared = useMemo(() => filterProjects(sharedProjects, normalizedQuery), [sharedProjects, normalizedQuery])
+
+  // ⌘K / Ctrl+K shortcut focuses the search input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <Tabs className="flex h-full flex-col" defaultValue="my-projects">
-        <TabsList
-          className={cn(
-            'mx-3 mt-3 w-[calc(100%-1.5rem)] rounded-full border border-(--border-default)',
-            'bg-(--bg-base) p-1'
+    <div className="flex min-h-0 flex-1 flex-col px-3.5 pt-3.5 pb-0">
+      {/* Search */}
+      <div className="relative mb-3.5 flex items-center">
+        <Search
+          className="pointer-events-none absolute left-3 size-3.5 shrink-0 text-zinc-600"
+          aria-hidden="true"
+        />
+        <input
+          ref={searchRef}
+          aria-label="Search projects"
+          className="w-full rounded-xl border border-zinc-800/60 bg-zinc-900/40 py-2.5 pl-9 pr-14 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none transition-all duration-200 focus:border-indigo-500/50 focus:bg-zinc-900/60 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12),0_0_14px_rgba(99,102,241,0.06)]"
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search projects…"
+          value={query}
+          type="search"
+          autoComplete="off"
+          spellCheck="false"
+        />
+        <AnimatePresence>
+          {query ? (
+            <motion.button
+              key="clear"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.12 }}
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-3 flex size-5 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
+            >
+              <X className="size-3" aria-hidden="true" />
+            </motion.button>
+          ) : (
+            <kbd
+              key="shortcut"
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 inline-flex h-5 select-none items-center gap-px rounded border border-zinc-800 bg-zinc-900 px-1.5 text-[9px] font-medium text-zinc-600"
+            >
+              <Command className="size-2.5" />K
+            </kbd>
           )}
+        </AnimatePresence>
+      </div>
+
+      {/* Segmented Tab Control */}
+      <Tabs
+        className="flex min-h-0 flex-1 flex-col"
+        defaultValue="my-projects"
+        onValueChange={(v) => setTab(v as ProjectTab)}
+        value={tab}
+      >
+        <TabsList
+          className="relative flex h-9 w-full rounded-full border border-zinc-800/50 bg-zinc-900/50 p-1"
+          role="tablist"
+          aria-label="Project categories"
         >
-          <TabsTrigger
-            className="rounded-full px-3 py-1 text-xs text-(--text-secondary) data-[state=active]:bg-(--bg-surface) data-[state=active]:text-(--text-primary)"
-            value="my-projects"
-          >
-            My Projects
-          </TabsTrigger>
-          <TabsTrigger
-            className="rounded-full px-3 py-1 text-xs text-(--text-secondary) data-[state=active]:bg-(--bg-surface) data-[state=active]:text-(--text-primary)"
-            value="shared"
-          >
-            Shared
-          </TabsTrigger>
+          {(['my-projects', 'shared'] as const).map((value) => {
+            const isActive = tab === value
+            const Icon = value === 'my-projects' ? FolderOpen : Users
+            const label = value === 'my-projects' ? 'Mine' : 'Shared'
+            const count = value === 'my-projects' ? ownedProjects.length : sharedProjects.length
+
+            return (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className={cn(
+                  'relative flex flex-1 items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-500 transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-0',
+                  'data-[state=active]:text-zinc-100'
+                )}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="tab-pill"
+                    className="absolute inset-0 rounded-full border border-zinc-700/40 bg-zinc-800/70 shadow-sm"
+                    transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                  />
+                )}
+                <Icon className="relative z-10 size-3" aria-hidden="true" />
+                <span className="relative z-10">{label}</span>
+                <span
+                  className={cn(
+                    'relative z-10 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums transition-colors',
+                    isActive
+                      ? 'bg-zinc-700/60 text-zinc-300'
+                      : 'bg-zinc-950/50 text-zinc-600'
+                  )}
+                >
+                  {count}
+                </span>
+              </TabsTrigger>
+            )
+          })}
         </TabsList>
 
-        <div className="flex-1 overflow-y-auto p-3 pt-2">
-          <TabsContent className="flex h-full flex-col" value="my-projects">
+        {/* Scrollable list area */}
+        <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto pt-4 pb-2 px-0.5">
+          <TabsContent
+            className="mt-0 flex h-full flex-col outline-none"
+            value="my-projects"
+          >
+            <SectionHeader
+              icon={LayoutGrid}
+              label="Owned"
+              resultCount={filteredOwned.length}
+            />
             <ProjectList
               activeProjectId={activeProjectId}
-              emptyLabel="No projects yet"
+              emptyLabel={query ? 'No matching projects' : 'No projects yet'}
               onDeleteProject={onDeleteProject}
               onOpenProject={onOpenProject}
               onRenameProject={onRenameProject}
-              projects={ownedProjects}
+              projects={filteredOwned}
             />
           </TabsContent>
 
-          <TabsContent className="flex h-full flex-col" value="shared">
+          <TabsContent
+            className="mt-0 flex h-full flex-col outline-none"
+            value="shared"
+          >
+            <SectionHeader
+              icon={Users}
+              label="Shared with me"
+              resultCount={filteredShared.length}
+            />
             <ProjectList
               activeProjectId={activeProjectId}
-              emptyLabel="No shared projects yet"
+              emptyLabel={query ? 'No matching shared projects' : 'Nothing shared yet'}
               onOpenProject={onOpenProject}
-              projects={sharedProjects}
+              projects={filteredShared}
             />
           </TabsContent>
         </div>
       </Tabs>
+
+      <style jsx global>{`
+        .sidebar-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+          transition: scrollbar-color 0.3s;
+        }
+        .sidebar-scrollbar:hover {
+          scrollbar-color: rgba(63, 63, 70, 0.45) transparent;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar { width: 4px; }
+        .sidebar-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scrollbar::-webkit-scrollbar-thumb {
+          border-radius: 9999px;
+          background-color: transparent;
+          transition: background-color 0.3s;
+        }
+        .sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
+          background-color: rgba(63, 63, 70, 0.45);
+        }
+      `}</style>
     </div>
   )
 }
 
+function filterProjects(projects: readonly EditorProject[], query: string) {
+  if (!query) return projects
+  return projects.filter((p) =>
+    [p.name, p.roomId, p.id]
+      .filter(Boolean)
+      .some((v) => v.toLowerCase().includes(query))
+  )
+}
+
+// --- Section Header ---
+
+// FIX [sidebar L677]: Marked props as readonly via interface
+interface SectionHeaderProps {
+  readonly icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>
+  readonly label: string
+  readonly resultCount: number
+}
+
+function SectionHeader({ icon: Icon, label, resultCount }: Readonly<SectionHeaderProps>) {
+  return (
+    <div className="mb-2 flex items-center gap-2 px-1">
+      <Icon className="size-3 text-zinc-600" aria-hidden="true" />
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+        {label}
+      </span>
+      <span className="ml-auto text-[10px] tabular-nums text-zinc-700">
+        {resultCount}
+      </span>
+    </div>
+  )
+}
+
+// --- Project List ---
+
+// FIX [sidebar L687]: Marked props as readonly via interface
 interface ProjectListProps {
   readonly projects: readonly EditorProject[]
   readonly activeProjectId?: string
@@ -217,87 +518,224 @@ interface ProjectListProps {
   readonly onDeleteProject?: (project: EditorProject) => void
 }
 
-function ProjectList(props: ProjectListProps) {
-  const {
-    projects,
-    activeProjectId,
-    emptyLabel = 'No projects yet',
-    onOpenProject,
-    onRenameProject,
-    onDeleteProject,
-  } = props
-
+function ProjectList({
+  projects,
+  activeProjectId,
+  emptyLabel = 'No projects yet',
+  onOpenProject,
+  onRenameProject,
+  onDeleteProject,
+}: Readonly<ProjectListProps>) {
   if (projects.length === 0) {
     return <EmptyProjectsState label={emptyLabel} />
   }
 
   return (
-    <div className="space-y-2">
-      {projects.map((project) => (
+    <motion.ul
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      className="space-y-0.5 pb-2"
+      role="list"
+    >
+      {projects.map((project) => {
+        const isActive = project.id === activeProjectId
+        const meta = getProjectMeta(project)
+
+        return (
+          <motion.li
+            key={project.id}
+            variants={itemVariants}
+            layout
+          >
+            <ProjectCard
+              project={project}
+              meta={meta}
+              isActive={isActive}
+              onOpenProject={onOpenProject}
+              onRenameProject={onRenameProject}
+              onDeleteProject={onDeleteProject}
+            />
+          </motion.li>
+        )
+      })}
+    </motion.ul>
+  )
+}
+
+// --- Project Card ---
+
+interface ProjectCardProps {
+  readonly project: EditorProject
+  readonly meta: ReturnType<typeof getProjectMeta>
+  readonly isActive: boolean
+  readonly onOpenProject?: (project: EditorProject) => void
+  readonly onRenameProject?: (project: EditorProject) => void
+  readonly onDeleteProject?: (project: EditorProject) => void
+}
+
+function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, onDeleteProject }: ProjectCardProps) {
+  const isInteractive = !!onOpenProject
+
+  return (
+    <motion.div
+      whileHover={isInteractive ? { x: 3 } : undefined}
+      whileTap={isInteractive ? { scale: 0.985 } : undefined}
+      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+      onClick={() => onOpenProject?.(project)}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      aria-pressed={isInteractive ? isActive : undefined}
+      aria-label={isInteractive ? `Open project: ${project.name}` : undefined}
+      onKeyDown={(e) => {
+        if (isInteractive && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onOpenProject?.(project)
+        }
+      }}
+      className={cn(
+        'group relative overflow-hidden rounded-xl border p-3 transition-colors duration-150',
+        isInteractive ? 'cursor-pointer' : 'cursor-default',
+        isActive
+          ? 'border-zinc-700/60 bg-zinc-900/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]'
+          : 'border-transparent bg-transparent hover:border-zinc-800/50 hover:bg-zinc-900/35'
+      )}
+    >
+      {/* Active left-bar accent — FIX [sidebar L619]: w-[2px] → w-0.5 */}
+      <motion.div
+        aria-hidden="true"
+        animate={{
+          scaleY: isActive ? 0.65 : 0,
+          opacity: isActive ? 1 : 0,
+        }}
+        transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+        className="absolute inset-y-0 left-0 w-0.5 origin-center rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.6)]"
+      />
+
+      <div className="flex items-start justify-between gap-3 pl-2">
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p
+              className={cn(
+                'truncate text-sm font-medium tracking-tight transition-colors',
+                isActive ? 'text-zinc-100' : 'text-zinc-300 group-hover:text-zinc-100'
+              )}
+            >
+              {project.name}
+            </p>
+            {project.owned && <ProjectBadge label="Owned" />}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="truncate text-xs text-zinc-600">{meta.updatedLabel}</p>
+            <AvatarStack avatars={meta.avatars} countLabel={meta.countLabel} />
+          </div>
+        </div>
+
+        {/* FIX [sidebar L644]: role="group" → use <div> without role, wrap in <fieldset> equivalent
+            Sonar S6819 warns against role="group" on div; switched to aria-label only, semantically correct */}
         <div
-          key={project.id}
-          className={cn(
-            'flex items-start justify-between gap-3 rounded-lg border px-3 py-3 transition-colors duration-200',
-            project.id === activeProjectId
-              ? 'border-(--border-accent) bg-(--accent-primary-muted) shadow-[var(--shadow-glow-cyan)]'
-              : 'border-(--border-default) bg-(--bg-base) hover:border-(--border-strong) hover:bg-(--bg-subtle)'
-          )}
+          className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+          aria-label={`Actions for ${project.name}`}
         >
-          {onOpenProject ? (
+          {project.owned && onRenameProject && (
             <button
-              className="flex min-w-0 flex-1 items-start gap-3 text-left"
-              onClick={() => onOpenProject(project)}
+              aria-label={`Rename ${project.name}`}
+              className="flex size-7 items-center justify-center rounded-lg border border-zinc-800/70 bg-zinc-900/60 text-zinc-500 transition-all duration-150 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+              onClick={(e) => { e.stopPropagation(); onRenameProject(project) }}
               type="button"
             >
-              <span className="mt-1.5 h-2 w-2 rounded-full bg-(--accent-secondary) shadow-[var(--shadow-glow-cyan)]" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-(--text-primary)">{project.name}</p>
-                <p className="truncate text-xs text-(--text-secondary)">{project.roomId}</p>
-              </div>
+              <PencilLine className="size-3" aria-hidden="true" />
             </button>
-          ) : (
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <span className="mt-1.5 h-2 w-2 rounded-full bg-(--accent-secondary) shadow-[var(--shadow-glow-cyan)]" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-(--text-primary)">{project.name}</p>
-                <p className="truncate text-xs text-(--text-secondary)">{project.roomId}</p>
-              </div>
-            </div>
           )}
-
-          {project.owned && onRenameProject && onDeleteProject ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                aria-label={`Rename ${project.name}`}
-                onClick={() => onRenameProject(project)}
-                size="icon-xs"
-                variant="ghost"
-              >
-                <PencilLine className="size-3.5" />
-              </Button>
-              <Button
-                aria-label={`Delete ${project.name}`}
-                onClick={() => onDeleteProject(project)}
-                size="icon-xs"
-                variant="ghost"
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          ) : null}
+          {project.owned && onDeleteProject && (
+            <button
+              aria-label={`Delete ${project.name}`}
+              className="flex size-7 items-center justify-center rounded-lg border border-zinc-800/70 bg-zinc-900/60 text-zinc-500 transition-all duration-150 hover:border-red-900/50 hover:bg-red-950/50 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+              onClick={(e) => { e.stopPropagation(); onDeleteProject(project) }}
+              type="button"
+            >
+              <Trash2 className="size-3" aria-hidden="true" />
+            </button>
+          )}
         </div>
-      ))}
+      </div>
+    </motion.div>
+  )
+}
+
+// --- Project Badge ---
+
+// FIX [sidebar L677]: Marked props as readonly
+function ProjectBadge({ label }: Readonly<{ label: string }>) {
+  return (
+    <span className="shrink-0 rounded-md border border-zinc-800/80 bg-zinc-900 px-1.5 py-px text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+      {label}
+    </span>
+  )
+}
+
+// --- Avatar Stack ---
+
+// FIX [sidebar L687]: Marked props as readonly
+function AvatarStack({ avatars, countLabel }: Readonly<{ avatars: string[]; countLabel: string }>) {
+  if (avatars.length === 0) return null
+
+  return (
+    <div className="group/stack flex items-center gap-1.5">
+      <div className="flex -space-x-1.5 transition-[gap] duration-300 group-hover/stack:-space-x-0.5">
+        {avatars.map((avatar, i) => (
+          <span
+            key={`${avatar}-${i}`}
+            aria-hidden="true"
+            className={cn(
+              // FIX [sidebar L698]: size-[18px] → size-4.5
+              'flex size-4.5 select-none items-center justify-center rounded-full text-[9px] font-bold ring-2 ring-zinc-950 shadow-sm',
+              i === 0 && 'bg-zinc-800 text-zinc-300 border border-zinc-700/50',
+              i === 1 && 'bg-indigo-950/80 text-indigo-300 border border-indigo-900/60',
+              i === 2 && 'bg-violet-950/80 text-violet-300 border border-violet-900/60'
+            )}
+          >
+            {avatar}
+          </span>
+        ))}
+      </div>
+      {countLabel && (
+        <span className="text-[10px] font-medium tabular-nums text-zinc-700 transition-colors group-hover/stack:text-zinc-400">
+          {countLabel}
+        </span>
+      )}
     </div>
   )
 }
 
+// --- Empty State ---
+
+// FIX [sidebar L719]: Marked props as readonly
 function EmptyProjectsState({ label = 'No projects yet' }: Readonly<{ label?: string }>) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
-      <p className="text-sm leading-relaxed text-(--text-secondary)">{label}</p>
-    </div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 240, damping: 22 }}
+      // FIX [sidebar L731]: max-w-[180px] → max-w-45 (outer div updated below)
+      className="flex min-h-52 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800/60 bg-zinc-900/10 px-4 py-8 text-center"
+    >
+      <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-600 shadow-sm">
+        <FolderOpen className="size-5" aria-hidden="true" />
+      </div>
+      <p className="text-xs font-semibold text-zinc-400">{label}</p>
+      {/* FIX [sidebar L731]: max-w-[180px] → max-w-45 */}
+      <p className="mt-1.5 max-w-45 text-[11px] leading-relaxed text-zinc-600">
+        Projects let you isolate and share assets cleanly across your team.
+      </p>
+    </motion.div>
   )
 }
+
+// --- Sidebar Footer ---
 
 interface SidebarFooterProps {
   readonly onCreateProject: () => void
@@ -305,11 +743,70 @@ interface SidebarFooterProps {
 
 export function SidebarFooter({ onCreateProject }: SidebarFooterProps) {
   return (
-    <div className={cn('flex flex-col gap-2 border-t border-(--border-default) p-4')}>
-      <Button className="w-full gap-2" onClick={onCreateProject} size="sm" type="button">
-        <Plus className="size-4" />
-        New Project
-      </Button>
+    <div className="shrink-0 border-t border-zinc-800/50 bg-zinc-950/80 p-4 backdrop-blur-md">
+      <motion.button
+        whileHover={{ y: -1, scale: 1.01 }}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+        className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-2.5 text-xs font-semibold text-white outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-indigo-400/60 focus-visible:ring-offset-0"
+        style={{
+          background: 'linear-gradient(160deg, #6366f1 0%, #7c3aed 100%)',
+          boxShadow: '0 4px 16px rgba(99,102,241,0.22), inset 0 1px 0 rgba(255,255,255,0.18)',
+        }}
+        onClick={onCreateProject}
+        type="button"
+        aria-label="Create new project"
+      >
+        {/* Shimmer — FIX [sidebar L763]: translate-x-[-100%] → -translate-x-full, bg-gradient-to-r → bg-linear-to-r, translate-x-[100%] → translate-x-full */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/10 to-transparent transition-transform duration-500 group-hover:translate-x-full"
+        />
+        <Plus className="relative size-3.5 transition-transform duration-200 group-hover:rotate-90" aria-hidden="true" />
+        <span className="relative">New Project</span>
+      </motion.button>
+
+      <p className="mt-3 text-center text-[10px] text-zinc-700 leading-relaxed">
+        Review workspace limits and usage anytime.
+      </p>
     </div>
   )
+}
+
+// --- Data Helpers ---
+
+function getProjectMeta(project: EditorProject) {
+  const collaborators = project.collaborators ?? []
+  const displayed = collaborators.slice(0, 3)
+  const avatars = displayed.map(getInitials)
+  const overflow = Math.max(0, collaborators.length - 3)
+  const countLabel = overflow > 0 ? `+${overflow}` : ''
+  const updatedLabel = formatRelativeTime(project.updatedAt)
+  return { avatars, updatedLabel, countLabel }
+}
+
+function getInitials(c: CollaboratorProfile): string {
+  const name = c.displayName || c.email.split('@')[0] || '?'
+  const parts = name.trim().split(/[\s._-]+/)
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.substring(0, 2).toUpperCase()
+}
+
+function formatRelativeTime(dateInput?: string): string {
+  if (!dateInput) return 'Updated recently'
+  const ms = new Date(dateInput).getTime()
+  // FIX [sidebar L799]: isNaN → Number.isNaN (Sonar S7773)
+  if (Number.isNaN(ms)) return 'Updated recently'
+
+  const deltaS = Math.round((Date.now() - ms) / 1000)
+  if (deltaS < 60) return 'Just now'
+  const deltaM = Math.floor(deltaS / 60)
+  if (deltaM < 60) return `${deltaM}m ago`
+  const deltaH = Math.floor(deltaM / 60)
+  if (deltaH < 24) return `${deltaH}h ago`
+  const deltaD = Math.floor(deltaH / 24)
+  if (deltaD === 1) return 'Yesterday'
+  if (deltaD < 7) return `${deltaD}d ago`
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
