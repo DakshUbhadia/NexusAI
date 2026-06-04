@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactElement } from 'react'
 
-import { Bot, Download, FileText, LoaderCircle, Send, Sparkles, X } from 'lucide-react'
+import { Bot, Download, FileText, LoaderCircle, Send, Sparkles, X, Users } from 'lucide-react'
 import { useCreateFeed, useCreateFeedMessage, useFeedMessages, useSelf, useStorage } from '@liveblocks/react'
 import { useRealtimeRun } from '@trigger.dev/react-hooks'
 import { useRouter } from 'next/navigation'
@@ -21,6 +21,9 @@ import {
   parseAiChatFeedMessage,
   parseAiStatusFeedMessage,
 } from '@/types/tasks'
+
+// New constant for Team Chat Feed
+const COLLAB_CHAT_FEED_ID = 'collab-chat-feed'
 
 const starterPrompts = [
   'Design an e-commerce backend',
@@ -46,6 +49,14 @@ type ChatFeedMessage = {
   readonly id: string
   readonly createdAt: number
   readonly role: 'user' | 'assistant'
+  readonly sender: string
+  readonly content: string
+  readonly timestamp: string
+}
+
+type CollabChatMessage = {
+  readonly id: string
+  readonly createdAt: number
   readonly sender: string
   readonly content: string
   readonly timestamp: string
@@ -167,31 +178,46 @@ function normalizeFlowSnapshot(candidate: unknown): CanvasFlow {
 
 export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange }: AiSidebarProps): ReactElement {
   const router = useRouter()
+  
+  // Architect AI Chat State
   const [prompt, setPrompt] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  
+  // Team Collab Chat State
+  const [collabPrompt, setCollabPrompt] = useState('')
+  const [isCollabSending, setIsCollabSending] = useState(false)
+  const collabTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // Specs State
   const [isSpecSubmitting, setIsSpecSubmitting] = useState(false)
   const [specStatusMessage, setSpecStatusMessage] = useState<string | null>(null)
   const [selectedSpec, setSelectedSpec] = useState<ProjectSpecListItem | null>(null)
   const [selectedSpecContent, setSelectedSpecContent] = useState<string>('')
   const [isSpecContentLoading, setIsSpecContentLoading] = useState(false)
   const [specContentError, setSpecContentError] = useState<string | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  
   const processedRunIdsRef = useRef<Set<string>>(new Set())
   const processedSpecRunIdsRef = useRef<Set<string>>(new Set())
   const [activeRun, setActiveRun] = useState<ActiveRunState | null>(null)
   const [activeSpecRun, setActiveSpecRun] = useState<ActiveSpecRunState | null>(null)
+  
   const createFeed = useCreateFeed()
   const createFeedMessage = useCreateFeedMessage()
   const self = useSelf((current) => current)
   const storageFlow = useStorage((root) => root.flow)
+  
   const { messages: feedMessages } = useFeedMessages(AI_STATUS_FEED_ID, {
     limit: 1,
   })
   const { messages: chatFeedMessages } = useFeedMessages(AI_CHAT_FEED_ID)
+  const { messages: collabFeedMessages } = useFeedMessages(COLLAB_CHAT_FEED_ID) // Team chat feed
+
   const latestFeedStatus = useMemo(() => {
     const latestMessage = feedMessages?.[0]
     return parseAiStatusFeedMessage(latestMessage?.data ?? null)
   }, [feedMessages])
+
   const chatMessages = useMemo<ChatFeedMessage[]>(() => {
     if (!chatFeedMessages) {
       return []
@@ -216,15 +242,39 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
       })
       .filter((message): message is ChatFeedMessage => message !== null)
   }, [chatFeedMessages])
+
+  // Parse Collab Chat Messages
+  const teamMessages = useMemo<CollabChatMessage[]>(() => {
+    if (!collabFeedMessages) {
+      return []
+    }
+
+    return [...collabFeedMessages]
+      .sort((first, second) => first.createdAt - second.createdAt)
+      .map((message) => {
+        const data = message.data as Record<string, unknown> | undefined
+        return {
+          id: message.id,
+          createdAt: message.createdAt,
+          sender: typeof data?.sender === 'string' ? data.sender : 'Unknown',
+          content: typeof data?.content === 'string' ? data.content : '',
+          timestamp: typeof data?.timestamp === 'string' ? data.timestamp : new Date(message.createdAt).toISOString(),
+        }
+      })
+  }, [collabFeedMessages])
+
   const canvasFlowForSpec = useMemo(() => normalizeFlowSnapshot(storageFlow), [storageFlow])
+  
   const { run: realtimeRun, error: realtimeRunError } = useRealtimeRun(activeRun?.runId, {
     accessToken: activeRun?.publicToken,
     enabled: Boolean(activeRun?.runId && activeRun?.publicToken),
   })
+  
   const { run: realtimeSpecRun, error: realtimeSpecRunError } = useRealtimeRun(activeSpecRun?.runId, {
     accessToken: activeSpecRun?.publicToken,
     enabled: Boolean(activeSpecRun?.runId && activeSpecRun?.publicToken),
   })
+  
   const isRunActive = activeRun !== null && !(realtimeRun?.isCompleted ?? false)
   const isSpecRunActive = activeSpecRun !== null && !(realtimeSpecRun?.isCompleted ?? false)
   const isComposerBusy = isSending || isRunActive
@@ -232,11 +282,14 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = '72px'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+  }, [])
 
-    if (!textarea) {
-      return
-    }
-
+  const resizeCollabTextarea = useCallback(() => {
+    const textarea = collabTextareaRef.current
+    if (!textarea) return
     textarea.style.height = '72px'
     textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
   }, [])
@@ -247,6 +300,14 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
       globalThis.requestAnimationFrame(resizeTextarea)
     },
     [resizeTextarea]
+  )
+
+  const handleCollabPromptChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => {
+      setCollabPrompt(event.target.value)
+      globalThis.requestAnimationFrame(resizeCollabTextarea)
+    },
+    [resizeCollabTextarea]
   )
 
   const handleStarterPrompt = useCallback(
@@ -308,21 +369,29 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
   useEffect(() => {
     let cancelled = false
 
-    async function ensureChatFeed(): Promise<void> {
+    async function ensureFeeds(): Promise<void> {
       try {
         await createFeed(AI_CHAT_FEED_ID, {
-          metadata: {
-            name: 'AI Chat',
-          },
+          metadata: { name: 'AI Chat' },
         })
       } catch (error) {
         if (!isFeedAlreadyExistsError(error) && !cancelled) {
           console.warn('Failed to create ai-chat feed.', error)
         }
       }
+
+      try {
+        await createFeed(COLLAB_CHAT_FEED_ID, {
+          metadata: { name: 'Team Chat' },
+        })
+      } catch (error) {
+        if (!isFeedAlreadyExistsError(error) && !cancelled) {
+          console.warn('Failed to create collab-chat feed.', error)
+        }
+      }
     }
 
-    void ensureChatFeed()
+    void ensureFeeds()
 
     return () => {
       cancelled = true
@@ -335,7 +404,6 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
     }
 
     const abortController = new AbortController()
-
     const previewUrl = buildSpecDownloadUrl(projectId, selectedSpec.id)
 
     async function loadSpecContent(): Promise<void> {
@@ -441,7 +509,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
     console.warn(`Spec run monitoring failed: ${realtimeSpecRunError.message}`)
   }, [activeSpecRun, realtimeSpecRunError])
 
-  const handleSubmit = useCallback(async () => {
+  const handleAiSubmit = useCallback(async () => {
     const trimmedPrompt = prompt.trim()
 
     if (!trimmedPrompt || isComposerBusy) {
@@ -529,6 +597,31 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
     }
   }, [createFeedMessage, currentSenderName, isComposerBusy, projectId, prompt, resizeTextarea, roomId, sendAssistantMessage])
 
+  const handleCollabSubmit = useCallback(async () => {
+    const trimmedPrompt = collabPrompt.trim()
+
+    if (!trimmedPrompt || isCollabSending) {
+      return
+    }
+
+    setIsCollabSending(true)
+
+    try {
+      await createFeedMessage(COLLAB_CHAT_FEED_ID, {
+        sender: currentSenderName,
+        content: trimmedPrompt,
+        timestamp: new Date().toISOString(),
+      })
+
+      setCollabPrompt('')
+      globalThis.requestAnimationFrame(resizeCollabTextarea)
+    } catch (error) {
+      console.error('Failed to send team message.', error)
+    } finally {
+      setIsCollabSending(false)
+    }
+  }, [collabPrompt, isCollabSending, createFeedMessage, currentSenderName, resizeCollabTextarea])
+
   const handleGenerateSpec = useCallback(async () => {
     if (isSpecSubmitting || isSpecRunActive) {
       return
@@ -611,11 +704,21 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
       if (event.key !== 'Enter' || event.shiftKey) {
         return
       }
-
       event.preventDefault()
-      handleSubmit()
+      handleAiSubmit()
     },
-    [handleSubmit]
+    [handleAiSubmit]
+  )
+
+  const handleCollabPromptKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key !== 'Enter' || event.shiftKey) {
+        return
+      }
+      event.preventDefault()
+      handleCollabSubmit()
+    },
+    [handleCollabSubmit]
   )
 
   return (
@@ -631,11 +734,11 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
           <Bot className="size-4 text-(--accent-primary)" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-(--text-primary)">AI Workspace</p>
-          <p className="truncate text-xs text-(--text-muted)">Collaborate with Nexus AI</p>
+          <p className="truncate text-sm font-semibold text-(--text-primary)">Workspace Center</p>
+          <p className="truncate text-xs text-(--text-muted)">Collaborate with AI & Team</p>
         </div>
         <Button
-          aria-label="Close AI sidebar"
+          aria-label="Close sidebar"
           className="shrink-0 hover:bg-(--accent-primary-muted)"
           onClick={() => onOpenChange(false)}
           size="icon"
@@ -646,27 +749,35 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
         </Button>
       </header>
 
-      <Tabs className="min-h-0 flex-1 gap-0" defaultValue="architect">
+      <Tabs className="min-h-0 flex-1 gap-0 flex flex-col" defaultValue="architect">
         <div className="border-b border-(--border-default) px-4 py-3">
-          <TabsList className="grid h-9 w-full grid-cols-2 rounded-full border border-(--border-default) bg-(--bg-subtle) p-1">
+          <TabsList className="grid h-9 w-full grid-cols-3 rounded-full border border-(--border-default) bg-(--bg-subtle) p-1">
             <TabsTrigger
               className="rounded-full text-xs text-(--text-muted) data-active:bg-(--accent-primary-muted) data-active:text-(--accent-primary) dark:data-active:bg-(--accent-primary-muted) dark:data-active:text-(--accent-primary)"
               value="architect"
             >
-              <Sparkles className="size-3.5" />
-              AI Architect
+              <Sparkles className="size-3.5 mr-1.5" />
+              AI
+            </TabsTrigger>
+            <TabsTrigger
+              className="rounded-full text-xs text-(--text-muted) data-active:bg-(--accent-primary-muted) data-active:text-(--accent-primary) dark:data-active:bg-(--accent-primary-muted) dark:data-active:text-(--accent-primary)"
+              value="team"
+            >
+              <Users className="size-3.5 mr-1.5" />
+              Team
             </TabsTrigger>
             <TabsTrigger
               className="rounded-full text-xs text-(--text-muted) data-active:bg-(--accent-primary-muted) data-active:text-(--accent-primary) dark:data-active:bg-(--accent-primary-muted) dark:data-active:text-(--accent-primary)"
               value="specs"
             >
-              <FileText className="size-3.5" />
+              <FileText className="size-3.5 mr-1.5" />
               Specs
             </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent className="min-h-0 flex-1 data-[state=inactive]:hidden" value="architect">
+        {/* AI Architect Tab */}
+        <TabsContent className="min-h-0 flex-1 flex-col data-[state=inactive]:hidden data-[state=active]:flex" value="architect">
           <div className="flex h-full min-h-0 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               {chatMessages.length === 0 ? (
@@ -707,7 +818,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                         <span className="truncate">{message.sender}</span>
                         <span>{formatMessageTime(message.timestamp, message.createdAt)}</span>
                       </div>
-                      <p>{message.content}</p>
+                      <p className="whitespace-pre-wrap">{message.content}</p>
                     </div>
                   ))}
                 </div>
@@ -736,7 +847,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                   className="h-10 w-10 shrink-0 bg-(--state-success) text-(--bg-base) hover:bg-(--state-success) disabled:opacity-50"
                   disabled={!prompt.trim() || isComposerBusy}
                   onClick={() => {
-                    void handleSubmit()
+                    void handleAiSubmit()
                   }}
                   size="icon"
                   type="button"
@@ -748,10 +859,79 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
           </div>
         </TabsContent>
 
-        <TabsContent className="min-h-0 flex-1 data-[state=inactive]:hidden" value="specs">
+        {/* Team Chat Tab */}
+        <TabsContent className="min-h-0 flex-1 flex-col data-[state=inactive]:hidden data-[state=active]:flex" value="team">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              {teamMessages.length === 0 ? (
+                <div className="flex min-h-full flex-col items-center justify-center text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-surface-elevated) shadow-(--shadow-md)">
+                    <Users className="size-5 text-(--accent-primary)" />
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-(--text-primary)">No messages yet</p>
+                  <p className="mt-2 max-w-64 text-xs leading-relaxed text-(--text-secondary)">
+                    Start a conversation with your team members currently in this workspace.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {teamMessages.map((message) => {
+                    const isMe = message.sender === currentSenderName
+                    return (
+                      <div
+                        className={cn(
+                          'max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-(--shadow-sm)',
+                          isMe
+                            ? 'ml-auto border border-transparent bg-(--accent-primary) text-white dark:text-(--bg-base)'
+                            : 'mr-auto border border-(--border-default) bg-(--bg-surface-elevated) text-(--text-primary)'
+                        )}
+                        key={message.id}
+                      >
+                        <div className={cn("mb-1 flex items-center justify-between gap-2 text-[11px]", isMe ? "text-white/80 dark:text-(--bg-base)/80" : "text-(--text-muted)")}>
+                          <span className="truncate">{message.sender}</span>
+                          <span>{formatMessageTime(message.timestamp, message.createdAt)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-(--border-default) bg-(--bg-overlay) p-4">
+              <div className="flex items-end gap-2">
+                <Textarea
+                  className="max-h-40 min-h-[72px] resize-none border-(--border-default) bg-(--bg-subtle) text-(--text-primary) placeholder:text-(--text-muted) focus-visible:border-(--border-accent)"
+                  disabled={isCollabSending}
+                  onChange={handleCollabPromptChange}
+                  onKeyDown={handleCollabPromptKeyDown}
+                  placeholder="Message your team..."
+                  ref={collabTextareaRef}
+                  value={collabPrompt}
+                />
+                <Button
+                  aria-label="Send team message"
+                  className="h-10 w-10 shrink-0 bg-(--accent-primary) text-white dark:text-(--bg-base) hover:bg-(--accent-primary-hover) disabled:opacity-50"
+                  disabled={!collabPrompt.trim() || isCollabSending}
+                  onClick={() => {
+                    void handleCollabSubmit()
+                  }}
+                  size="icon"
+                  type="button"
+                >
+                  {isCollabSending ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Specs Tab */}
+        <TabsContent className="min-h-0 flex-1 flex-col data-[state=inactive]:hidden data-[state=active]:flex" value="specs">
           <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-4">
             <Button
-              className="w-full bg-(--accent-primary) text-(--text-primary) hover:bg-(--accent-primary-hover)"
+              className="w-full bg-(--accent-primary) text-white dark:text-(--bg-base) hover:bg-(--accent-primary-hover)"
               disabled={isSpecSubmitting || isSpecRunActive}
               onClick={() => {
                 void handleGenerateSpec()

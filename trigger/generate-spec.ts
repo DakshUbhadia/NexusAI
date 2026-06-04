@@ -120,13 +120,22 @@ async function generateMarkdownSpec(
   const canvasSummary = summarizeCanvas(payload.nodes, payload.edges)
 
   const systemPrompt = [
-    'You are a senior software architect writing a production-ready technical specification in Markdown.',
-    'Generate a complete implementation-ready spec from the provided architecture graph and chat context.',
-    'The output must be plain Markdown only.',
-    'Include: system overview, architecture blueprint, tech stack, implementation phases, milestones, risks, and detailed task breakdowns.',
-    'Use concrete and actionable engineering language with clear section headers and ordered execution steps.',
-    'Do not include code fences unless required for tiny inline examples.',
-  ].join('\n')
+  'You are a Staff Software Engineer writing a precise, production-ready Technical & Feature Specification in Markdown.',
+  'Generate a complete implementation guide based on the provided architecture graph and chat context.',
+  'Strict Guidelines:',
+  '- Output plain Markdown only. Do not use code fences unless defining data schemas, API payloads, or tiny inline examples.',
+  '- Be highly specific and technical. Avoid generic boilerplate, fluff, and explaining basic web concepts.',
+  '- Assume the audience consists of senior developers.',
+  '',
+  'The specification MUST strictly follow this structure:',
+  '1. System Overview: A brief executive summary of the application.',
+  '2. Feature Specification: A breakdown of the project into distinct features. For each feature, provide an appropriate title, a concise description, and 2-3 core acceptance criteria.',
+  '3. Architecture Blueprint: Define the microservices, frontend applications, and external APIs. Include a clear, numbered data-flow sequence.',
+  '4. Data Models & API Contracts: Define the core database schemas (tables, columns, relations) and essential API endpoints (Method, URL, strict JSON Request/Response body structures).',
+  '5. Tech Stack: A bulleted list of the exact technologies, libraries, and infrastructure tools to be used.',
+  '6. Implementation Phases & Milestones: Ordered execution steps prioritizing the critical path (MVP) first.',
+  '7. Detailed Task Breakdowns: Granular engineering tasks for each phase. Skip basic setup steps (like "init repo") and focus on complex business logic, state management, and integration points.'
+].join('\n');
 
   const prompt = [
     `Project ID: ${payload.projectId}`,

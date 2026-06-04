@@ -1,8 +1,12 @@
+import type { CollaboratorProfile } from "@/types/collaborators"
+
 export interface EditorProject {
   readonly id: string
   readonly name: string
   readonly roomId: string
   readonly owned: boolean
+  readonly updatedAt: string // Serialized for Server-to-Client boundary
+  readonly collaborators: CollaboratorProfile[]
 }
 
 export interface EditorProjectLists {
@@ -10,23 +14,50 @@ export interface EditorProjectLists {
   readonly sharedProjects: EditorProject[]
 }
 
-function mapProject(project: { id: string; name: string }, owned: boolean): EditorProject {
+// Temporary type to map the Prisma payload safely
+type PrismaProjectPayload = {
+  id: string
+  name: string
+  updatedAt: Date
+  collaborators: { email: string; displayName?: string | null; avatarUrl?: string | null }[]
+}
+
+function mapProject(project: PrismaProjectPayload, owned: boolean): EditorProject {
   return {
     id: project.id,
     name: project.name,
     roomId: project.id,
     owned,
+    updatedAt: project.updatedAt.toISOString(),
+    collaborators: project.collaborators.map((c) => ({
+      email: c.email,
+      // Safely fallback to null if these columns aren't in your DB schema yet
+      displayName: c.displayName || null,
+      avatarUrl: c.avatarUrl || null,
+    })),
   }
 }
 
 export async function getEditorProjectLists(userId: string, userEmail?: string | null): Promise<EditorProjectLists> {
   const prisma = (await import("./prisma")).default
 
+  // Explicitly query the needed metadata alongside id and name
+  const projectSelect = {
+    id: true,
+    name: true,
+    updatedAt: true,
+    collaborators: {
+      select: {
+        email: true,
+      },
+    },
+  }
+
   const [ownedProjects, sharedProjects] = await Promise.all([
     prisma.project.findMany({
       where: { ownerId: userId },
       orderBy: { updatedAt: "desc" },
-      select: { id: true, name: true },
+      select: projectSelect,
     }),
     userEmail
       ? prisma.project.findMany({
@@ -39,13 +70,13 @@ export async function getEditorProjectLists(userId: string, userEmail?: string |
             },
           },
           orderBy: { updatedAt: "desc" },
-          select: { id: true, name: true },
+          select: projectSelect,
         })
-      : Promise.resolve([] as { id: string; name: string }[]),
+      : Promise.resolve([]),
   ])
 
   return {
-    ownedProjects: ownedProjects.map((project) => mapProject(project, true)),
-    sharedProjects: sharedProjects.map((project) => mapProject(project, false)),
+    ownedProjects: ownedProjects.map((project) => mapProject(project as PrismaProjectPayload, true)),
+    sharedProjects: sharedProjects.map((project) => mapProject(project as PrismaProjectPayload, false)),
   }
 }
