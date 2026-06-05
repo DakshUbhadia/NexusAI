@@ -1,8 +1,13 @@
-// Home page - redirects to /editor (authenticated) or /sign-in (unauthenticated)
-// Handled by middleware.ts
+import type { Metadata } from "next";
 
-export default function Home() {
-  return null
+import { LandingPage } from "@/components/landing/landing-page";
+
+export const metadata: Metadata = {
+  title: "Nexus AI | Collaborative Architecture Workspace",
+  description:
+    "Design systems together on a live canvas, generate architecture with AI, and turn decisions into build-ready technical specs.",
+};
+
+export default function HomePage() {
+  return <LandingPage />;
 }
-
-
