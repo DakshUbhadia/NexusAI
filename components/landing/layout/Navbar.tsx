@@ -14,6 +14,7 @@ export default function Navbar() {
   const navRef = useRef<HTMLElement>(null);
   const linksRef = useRef<HTMLUListElement>(null);
   const [scrolled, setScrolled] = useState(false);
+  const workspaceHref = "/sign-in";
 
   useEffect(() => {
     const nav = navRef.current;
@@ -59,28 +60,32 @@ export default function Navbar() {
       role="banner"
     >
       <nav
-        className="max-w-6xl mx-auto px-6 md:px-10 h-16 flex items-center justify-between"
+        className="max-w-6xl mx-auto px-6 md:px-10 h-16 flex items-center justify-between relative"
         aria-label="Main navigation"
       >
-        <Link
-          href="/"
-          className="flex items-center gap-2 font-display font-black text-lg tracking-tight text-white"
-          aria-label="Nexus AI — home"
-        >
-          <Image
-            src="/logo1.png"
-            alt="Nexus AI logo"
-            width={28}
-            height={28}
-            className="shrink-0"
-            priority
-          />
-          <span>
-            Nexus<span className="gradient-text"> AI</span>
-          </span>
-        </Link>
+        {/* Left Side: Logo */}
+        <div className="flex-1 flex justify-start">
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-display font-black text-lg tracking-tight text-white"
+            aria-label="Nexus AI — home"
+          >
+            <Image
+              src="/logo1.png"
+              alt="Nexus AI logo"
+              width={28}
+              height={28}
+              className="shrink-0"
+              priority
+            />
+            <span>
+              Nexus<span className="gradient-text"> AI</span>
+            </span>
+          </Link>
+        </div>
 
-        <ul ref={linksRef} className="hidden md:flex items-center gap-8">
+        {/* Center: Navigation Links (Perfectly Centered via absolute positioning) */}
+        <ul ref={linksRef} className="hidden md:flex items-center justify-center gap-8 absolute left-1/2 -translate-x-1/2">
           {navLinks.map((item) => (
             <li key={item.label}>
               <a
@@ -97,22 +102,25 @@ export default function Navbar() {
           ))}
         </ul>
 
-        <a
-          href="#how-it-works"
-          className="hidden md:inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold btn-violet"
-        >
-          Open Workspace
-        </a>
+        {/* Right Side: CTA Button and Mobile Menu */}
+        <div className="flex-1 flex justify-end items-center gap-4">
+          <Link
+            href={workspaceHref}
+            className="hidden md:inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold btn-violet"
+          >
+            Open Workspace
+          </Link>
 
-        <button
-          className="md:hidden flex flex-col gap-[5px] p-2 group"
-          aria-label="Open navigation menu"
-          type="button"
-        >
-          <span className="block w-5 h-0.5 bg-white/40 group-hover:bg-white transition-colors rounded-full" />
-          <span className="block w-3.5 h-0.5 bg-white/40 group-hover:bg-white transition-colors rounded-full" />
-          <span className="block w-5 h-0.5 bg-white/40 group-hover:bg-white transition-colors rounded-full" />
-        </button>
+          <button
+            className="md:hidden flex flex-col gap-[5px] p-2 group"
+            aria-label="Open navigation menu"
+            type="button"
+          >
+            <span className="block w-5 h-0.5 bg-white/40 group-hover:bg-white transition-colors rounded-full" />
+            <span className="block w-3.5 h-0.5 bg-white/40 group-hover:bg-white transition-colors rounded-full" />
+            <span className="block w-5 h-0.5 bg-white/40 group-hover:bg-white transition-colors rounded-full" />
+          </button>
+        </div>
       </nav>
     </header>
   );

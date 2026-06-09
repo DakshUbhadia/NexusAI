@@ -2,6 +2,7 @@ import Footer from "@/components/landing/layout/Footer";
 import Navbar from "@/components/landing/layout/Navbar";
 import FeaturesSection from "./sections/FeaturesSection";
 import HeroSection from "./sections/HeroSection";
+import HowItWorksSection from "./sections/HowItWorksSection";
 
 export function LandingPage() {
   return (
@@ -10,6 +11,7 @@ export function LandingPage() {
       <main>
         <HeroSection />
         <FeaturesSection />
+        <HowItWorksSection />
       </main>
       <Footer />
     </>
