@@ -44,35 +44,34 @@ export default function Footer() {
       role="contentinfo"
     >
       {/* Upper row */}
-      <div className="max-w-6xl mx-auto px-6 md:px-10 pt-10 pb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="max-w-6xl mx-auto px-6 md:px-10 pt-10 pb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative">
         {/* Brand + tagline */}
-
-        <div data-footer-reveal>
+        <div className="flex-1" data-footer-reveal>
           <Link
-          href="/"
-          className="flex items-center gap-2 font-display font-black text-lg tracking-tight text-white"
-          aria-label="Nexus AI — home"
+            href="/"
+            className="flex items-center gap-2 font-display font-black text-lg tracking-tight text-white"
+            aria-label="Nexus AI — home"
           >
-          <Image
-            src="/logo1.png"
-            alt="Nexus AI logo"
-            width={28}
-            height={28}
-            className="shrink-0"
-            priority
-          />
-          <span className="font-display font-bold text-lg tracking-tight gradient-text block mb-1">
-            Nexus AI
-          </span>
+            <Image
+              src="/logo1.png"
+              alt="Nexus AI logo"
+              width={28}
+              height={28}
+              className="shrink-0"
+              priority
+            />
+            <span className="font-display font-bold text-lg tracking-tight gradient-text block mb-1">
+              Nexus AI
+            </span>
           </Link>
-          <p className="text-xs text-[#4A4468] max-w-[260px] leading-relaxed">
+          <p className="text-xs text-[#4A4468] max-w-[260px] leading-relaxed mt-2">
             Real-time collaborative architecture design. From plain English to
             a build-ready AI-agent spec.
           </p>
         </div>
 
         {/* Nav links */}
-        <nav aria-label="Footer navigation" data-footer-reveal>
+        <nav aria-label="Footer navigation" className="flex-1 flex md:justify-center" data-footer-reveal>
           <ul className="flex items-center gap-6 flex-wrap" role="list">
             {footerLinks.map((link) => (
               <li key={link.label}>
@@ -86,15 +85,6 @@ export default function Footer() {
             ))}
           </ul>
         </nav>
-
-        {/* CTA */}
-        <a
-          href="#how-it-works"
-          className="hidden sm:inline-flex items-center px-5 py-2 rounded-full text-sm font-semibold btn-ghost"
-          data-footer-reveal
-        >
-          Open Workspace
-        </a>
       </div>
 
       {/* Bottom row */}

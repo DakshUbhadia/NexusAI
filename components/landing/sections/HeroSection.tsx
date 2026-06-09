@@ -28,6 +28,10 @@ export default function HeroSection() {
   const ctaRef = useRef<HTMLDivElement>(null);
   const scrollHintRef = useRef<HTMLDivElement>(null);
 
+  // "Open Workspace" always takes the user to the sign-in page.
+  // No automatic session restoration — users must authenticate every visit.
+  const workspaceHref = "/sign-in";
+
   const cursorX = useMotionValue(0);
   const cursorY = useMotionValue(0);
   const springX = useSpring(cursorX, { stiffness: 80, damping: 20 });
@@ -70,7 +74,7 @@ export default function HeroSection() {
     };
 
     const existingScript = document.querySelector<HTMLScriptElement>(
-      `script[src='${SPLINE_SCRIPT_SRC}']`
+      `script[src='${SPLINE_SCRIPT_SRC}']`,
     );
 
     if (!existingScript) {
@@ -110,7 +114,8 @@ export default function HeroSection() {
     if (!l1 || !l2) return;
 
     const splitLine = (el: HTMLElement) => {
-      if (el.dataset.split === "1") return el.querySelectorAll<HTMLElement>(".char > span");
+      if (el.dataset.split === "1")
+        return el.querySelectorAll<HTMLElement>(".char > span");
       el.dataset.split = "1";
       const text = el.textContent ?? "";
       el.innerHTML = text
@@ -118,7 +123,7 @@ export default function HeroSection() {
         .map((ch) =>
           ch === " "
             ? `<span style="display:inline-block;width:0.28em"> </span>`
-            : `<span class="char" style="display:inline-block;overflow:hidden;vertical-align:bottom"><span style="display:inline-block">${ch}</span></span>`
+            : `<span class="char" style="display:inline-block;overflow:hidden;vertical-align:bottom"><span style="display:inline-block">${ch}</span></span>`,
         )
         .join("");
       return el.querySelectorAll<HTMLElement>(".char > span");
@@ -134,19 +139,41 @@ export default function HeroSection() {
       tl.fromTo(
         badgeRef.current,
         { opacity: 0, y: -16, filter: "blur(6px)" },
-        { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.55, ease: "power3.out" }
+        {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.55,
+          ease: "power3.out",
+        },
       );
       tl.fromTo(
         [...chars1],
         { y: "105%", opacity: 0, rotateX: 45 },
-        { y: "0%", opacity: 1, rotateX: 0, duration: 0.9, stagger: 0.018, ease: "power4.out", transformOrigin: "bottom center" },
-        "-=0.2"
+        {
+          y: "0%",
+          opacity: 1,
+          rotateX: 0,
+          duration: 0.9,
+          stagger: 0.018,
+          ease: "power4.out",
+          transformOrigin: "bottom center",
+        },
+        "-=0.2",
       );
       tl.fromTo(
         [...chars2],
         { y: "105%", opacity: 0, rotateX: 45 },
-        { y: "0%", opacity: 1, rotateX: 0, duration: 0.9, stagger: 0.016, ease: "power4.out", transformOrigin: "bottom center" },
-        "-=0.65"
+        {
+          y: "0%",
+          opacity: 1,
+          rotateX: 0,
+          duration: 0.9,
+          stagger: 0.016,
+          ease: "power4.out",
+          transformOrigin: "bottom center",
+        },
+        "-=0.65",
       );
 
       const subEl = subtitleRef.current;
@@ -155,15 +182,21 @@ export default function HeroSection() {
         subEl.innerHTML = words
           .map(
             (w) =>
-              `<span style="display:inline-block;overflow:hidden;vertical-align:bottom;margin-right:0.28em"><span style="display:inline-block">${w}</span></span>`
+              `<span style="display:inline-block;overflow:hidden;vertical-align:bottom;margin-right:0.28em"><span style="display:inline-block">${w}</span></span>`,
           )
           .join("");
         const wordSpans = subEl.querySelectorAll("span > span");
         tl.fromTo(
           wordSpans,
           { y: "100%", opacity: 0 },
-          { y: "0%", opacity: 1, duration: 0.6, stagger: 0.04, ease: "power3.out" },
-          "-=0.4"
+          {
+            y: "0%",
+            opacity: 1,
+            duration: 0.6,
+            stagger: 0.04,
+            ease: "power3.out",
+          },
+          "-=0.4",
         );
         gsap.set(subEl, { opacity: 1 });
       }
@@ -171,14 +204,20 @@ export default function HeroSection() {
       tl.fromTo(
         ctaRef.current,
         { opacity: 0, y: 20, filter: "blur(8px)" },
-        { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.65, ease: "power3.out" },
-        "-=0.3"
+        {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.65,
+          ease: "power3.out",
+        },
+        "-=0.3",
       );
       tl.fromTo(
         scrollHintRef.current,
         { opacity: 0, y: 8 },
         { opacity: 1, y: 0, duration: 0.5 },
-        "+=0.4"
+        "+=0.4",
       );
     }, sectionRef);
 
@@ -191,12 +230,27 @@ export default function HeroSection() {
       const section = sectionRef.current;
       if (!section) return;
       gsap.to(pinWrapRef.current, {
-        scale: 0.88, opacity: 0, y: -40, filter: "blur(12px)", ease: "none",
-        scrollTrigger: { trigger: section, start: "top top", end: "35% top", scrub: 1.2 },
+        scale: 0.88,
+        opacity: 0,
+        y: -40,
+        filter: "blur(12px)",
+        ease: "none",
+        scrollTrigger: {
+          trigger: section,
+          start: "top top",
+          end: "35% top",
+          scrub: 1.2,
+        },
       });
       gsap.to(scrollHintRef.current, {
-        opacity: 0, ease: "none",
-        scrollTrigger: { trigger: section, start: "top top", end: "8% top", scrub: true },
+        opacity: 0,
+        ease: "none",
+        scrollTrigger: {
+          trigger: section,
+          start: "top top",
+          end: "8% top",
+          scrub: true,
+        },
       });
     });
     return () => ctx.revert();
@@ -269,7 +323,9 @@ export default function HeroSection() {
       {/* ── Bottom fade ── */}
       <div
         className="absolute bottom-0 left-0 right-0 h-48 z-[4] pointer-events-none"
-        style={{ background: "linear-gradient(to bottom, transparent 0%, #07070E 100%)" }}
+        style={{
+          background: "linear-gradient(to bottom, transparent 0%, #07070E 100%)",
+        }}
       />
 
       <Navbar />
@@ -311,7 +367,7 @@ export default function HeroSection() {
         <div ref={ctaRef} className="flex flex-col items-center gap-6 opacity-0">
           <div className="flex items-center gap-3 flex-wrap justify-center">
             <MagneticButton
-              href="/sign-in"
+              href={workspaceHref}
               className="group relative inline-flex items-center gap-2 px-7 py-3.5 rounded-full text-sm font-semibold text-white overflow-hidden btn-violet"
             >
               <span className="relative z-10">Open Workspace</span>
@@ -343,7 +399,10 @@ export default function HeroSection() {
           <div className="relative w-px h-12 overflow-hidden">
             <div
               className="absolute top-0 left-0 w-full bg-gradient-to-b from-transparent via-white/40 to-transparent"
-              style={{ height: "200%", animation: "scrollLine 1.8s ease-in-out infinite" }}
+              style={{
+                height: "200%",
+                animation: "scrollLine 1.8s ease-in-out infinite",
+              }}
             />
           </div>
         </div>
