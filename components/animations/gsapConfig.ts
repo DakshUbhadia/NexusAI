@@ -2,11 +2,10 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 
-if (typeof window !== "undefined") {
+if (globalThis.window !== undefined) {
   gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
   gsap.ticker.lagSmoothing(0);
 
-  // Global ScrollTrigger defaults
   ScrollTrigger.defaults({
     toggleActions: "play none none none",
   });

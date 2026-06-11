@@ -23,7 +23,7 @@ export default function MagneticButton({
   strength = 28,
   onClick,
   "aria-label": ariaLabel,
-}: MagneticButtonProps) {
+}: Readonly<MagneticButtonProps>) {
   const ref = useRef<HTMLElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
 

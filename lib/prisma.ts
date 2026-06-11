@@ -52,12 +52,11 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
   )
 }
 
-const prisma =
-  (globalThis.__prismaClient !== undefined && process.env.NODE_ENV === 'development')
-    ? hasRequiredDelegates(globalThis.__prismaClient)
-      ? globalThis.__prismaClient
-      : instantiate()
-    : instantiate()
+const prisma: PrismaClient = (globalThis.__prismaClient !== undefined && process.env.NODE_ENV === 'development')
+  ? (hasRequiredDelegates(globalThis.__prismaClient)
+    ? globalThis.__prismaClient
+    : instantiate())
+  : instantiate()
 
 if (process.env.NODE_ENV === 'development') globalThis.__prismaClient = prisma
 

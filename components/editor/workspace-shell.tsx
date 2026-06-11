@@ -92,12 +92,29 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
       ? ownedProjects.find((project) => project.id === projectActions.dialogState.projectId)
       : undefined
   const isOwner = ownedProjects.some((project) => project.id === currentProjectId)
+
   const handleTemplateImport = (template: CanvasTemplate): void => {
     setTemplateImportRequest((current) => ({
       requestId: (current?.requestId ?? 0) + 1,
       template,
     }))
   }
+
+  const saveStatusIcon = (() => {
+    if (canvasSaveStatus === 'saving') {
+      return <LoaderCircle className="size-4 animate-spin text-(--accent-primary)" />
+    }
+
+    if (canvasSaveStatus === 'saved') {
+      return <CheckCircle2 className="size-4 text-(--state-success)" />
+    }
+
+    if (canvasSaveStatus === 'error') {
+      return <AlertCircle className="size-4 text-(--state-error)" />
+    }
+
+    return <Save className="size-4" />
+  })()
 
   return (
     <>
@@ -106,7 +123,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
           <div className="flex min-w-0 items-center gap-3">
             <Button
               aria-label={projectSidebarOpen ? 'Close project panel' : 'Open project panel'}
-              className="shrink-0 hover:bg-(--accent-primary-muted)"
+              className="shrink-0 cursor-pointer hover:bg-(--accent-primary-muted)"
               onClick={() => setProjectSidebarOpen((current) => !current)}
               size="icon"
               type="button"
@@ -125,7 +142,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
 
           <div className="flex items-center gap-2">
             <Button
-              className="gap-2"
+              className="gap-2 cursor-pointer"
               disabled={!canvasSaveNow || canvasSaveStatus === 'saving'}
               onClick={() => {
                 void canvasSaveNow?.()
@@ -134,29 +151,21 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               type="button"
               variant="outline"
             >
-              {canvasSaveStatus === 'saving' ? (
-                <LoaderCircle className="size-4 animate-spin text-(--accent-primary)" />
-              ) : canvasSaveStatus === 'saved' ? (
-                <CheckCircle2 className="size-4 text-(--state-success)" />
-              ) : canvasSaveStatus === 'error' ? (
-                <AlertCircle className="size-4 text-(--state-error)" />
-              ) : (
-                <Save className="size-4" />
-              )}
+              {saveStatusIcon}
               <span className="max-w-64 truncate">
                 {getSaveButtonLabel(canvasSaveStatus, canvasSaveErrorMessage)}
               </span>
             </Button>
-            <Button className="gap-2" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
+            <Button className="gap-2 cursor-pointer" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
               <LayoutTemplate className="size-4" />
               Templates
             </Button>
-            <Button className="gap-2" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
+            <Button className="gap-2 cursor-pointer" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
               <Share2 className="size-4" />
               Share
             </Button>
             <Button
-              className="gap-2"
+              className="gap-2 cursor-pointer"
               onClick={() => setAiSidebarOpen((current) => !current)}
               type="button"
               variant="outline"
@@ -169,22 +178,6 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
 
         <main className="pt-(--topbar-height)">
           <div className="flex h-[calc(100dvh-var(--topbar-height))] min-h-0">
-            {projectSidebarOpen ? (
-              <ProjectSidebar
-                activeProjectId={currentProjectId}
-                isOpen={true}
-                mode="docked"
-                onClose={() => setProjectSidebarOpen(false)}
-                onCreateProject={projectActions.openCreateDialog}
-                onDeleteProject={(project) => projectActions.openDeleteDialog(project.id, project.name)}
-                onOpenProject={(project) => router.push(`/editor/${project.id}`)}
-                onRenameProject={(project) => projectActions.openRenameDialog(project.id, project.name)}
-                ownedProjects={ownedProjects}
-                sharedProjects={sharedProjects}
-                showCloseButton={true}
-              />
-            ) : null}
-
             <LiveblocksRoomProvider roomId={currentRoomId}>
               <section className="relative flex min-w-0 flex-1 overflow-hidden bg-(--bg-base)">
                 <CollaborativeCanvas
@@ -195,6 +188,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
                   templateImportRequest={templateImportRequest}
                 />
               </section>
+
               <AiSidebar
                 projectId={currentProjectId}
                 projectSpecs={projectSpecs}
@@ -205,6 +199,20 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             </LiveblocksRoomProvider>
           </div>
         </main>
+
+        <ProjectSidebar
+          activeProjectId={currentProjectId}
+          isOpen={projectSidebarOpen}
+          mode="overlay"
+          onClose={() => setProjectSidebarOpen(false)}
+          onCreateProject={projectActions.openCreateDialog}
+          onDeleteProject={(project) => projectActions.openDeleteDialog(project.id, project.name)}
+          onOpenProject={(project) => router.push(`/editor/${project.id}`)}
+          onRenameProject={(project) => projectActions.openRenameDialog(project.id, project.name)}
+          ownedProjects={ownedProjects}
+          sharedProjects={sharedProjects}
+          showCloseButton={true}
+        />
       </div>
 
       <CreateProjectDialog

@@ -64,7 +64,7 @@ export default function Footer() {
               Nexus AI
             </span>
           </Link>
-          <p className="text-xs text-[#4A4468] max-w-[260px] leading-relaxed mt-2">
+          <p className="text-xs text-[#4A4468] max-w-65 leading-relaxed mt-2">
             Real-time collaborative architecture design. From plain English to
             a build-ready AI-agent spec.
           </p>
@@ -72,7 +72,7 @@ export default function Footer() {
 
         {/* Nav links */}
         <nav aria-label="Footer navigation" className="flex-1 flex md:justify-center" data-footer-reveal>
-          <ul className="flex items-center gap-6 flex-wrap" role="list">
+          <ul className="flex items-center gap-6 flex-wrap">
             {footerLinks.map((link) => (
               <li key={link.label}>
                 <a

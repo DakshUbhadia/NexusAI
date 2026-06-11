@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ComponentType } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentType, type WheelEvent as ReactWheelEvent } from 'react'
 import {
   motion,
   AnimatePresence,
@@ -48,28 +47,18 @@ interface ProjectSidebarProps {
 // --- Motion Variants ---
 
 const sidebarVariants: Variants = {
-  dockedHidden: {
+  hidden: {
     width: 0,
     opacity: 0,
     marginLeft: 0,
     marginRight: 0,
     transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
   },
-  dockedVisible: {
+  visible: {
     width: '22rem',
     opacity: 1,
     marginLeft: '0.75rem',
     marginRight: '0.75rem',
-    transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
-  },
-  overlayHidden: {
-    x: '-100%',
-    opacity: 0,
-    transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
-  },
-  overlayVisible: {
-    x: 0,
-    opacity: 1,
     transition: { type: 'spring', stiffness: 420, damping: 42, bounce: 0 },
   },
 }
@@ -177,20 +166,20 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
             key="project-sidebar"
             role="complementary"
             aria-label="Projects sidebar"
-            initial={isDocked ? 'dockedHidden' : 'overlayHidden'}
-            animate={isDocked ? 'dockedVisible' : 'overlayVisible'}
-            exit={isDocked ? 'dockedHidden' : 'overlayHidden'}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
             variants={sidebarVariants}
             className={cn(
-              'flex flex-col overflow-hidden',
+              'flex min-h-0 flex-col overflow-hidden',
               'rounded-2xl border border-zinc-800/40 bg-zinc-950/95 text-zinc-100 shadow-[0_24px_60px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl',
               isDocked
                 ? 'relative shrink-0 h-[calc(100%-1.5rem)] my-3'
-                : 'fixed bottom-3 left-3 top-3 z-50 h-[calc(100%-1.5rem)] w-88',
+                : 'fixed bottom-3 left-0 top-3 z-50 h-[calc(100%-1.5rem)]',
               className
             )}
           >
-            {/* Atmospheric top-glow — FIX [sidebar L201]: bg-gradient-to-r → bg-linear-to-r */}
+            {/* Atmospheric top-glow */}
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-indigo-500/30 to-transparent"
@@ -268,7 +257,7 @@ export function SidebarHeader({ onClose, showCloseButton, projectCount, activeCo
         {showCloseButton && (
           <Button
             aria-label="Close sidebar"
-            className="size-8 shrink-0 rounded-xl border border-zinc-800/70 bg-zinc-900/40 text-zinc-500 shadow-none transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-0"
+            className="size-8 shrink-0 cursor-pointer rounded-xl border border-zinc-800/70 bg-zinc-900/40 text-zinc-500 shadow-none transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-800/60 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-0"
             onClick={onClose}
             size="icon"
             variant="ghost"
@@ -315,7 +304,7 @@ function SidebarTabs(props: SidebarTabsProps) {
   }, [])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-3.5 pt-3.5 pb-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3.5 pt-3.5 pb-0">
       {/* Search */}
       <div className="relative mb-3.5 flex items-center">
         <Search
@@ -343,7 +332,7 @@ function SidebarTabs(props: SidebarTabsProps) {
               transition={{ duration: 0.12 }}
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-3 flex size-5 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
+              className="absolute right-3 flex size-5 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors cursor-pointer"
             >
               <X className="size-3" aria-hidden="true" />
             </motion.button>
@@ -361,7 +350,7 @@ function SidebarTabs(props: SidebarTabsProps) {
 
       {/* Segmented Tab Control */}
       <Tabs
-        className="flex min-h-0 flex-1 flex-col"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         defaultValue="my-projects"
         onValueChange={(v) => setTab(v as ProjectTab)}
         value={tab}
@@ -382,7 +371,7 @@ function SidebarTabs(props: SidebarTabsProps) {
                 key={value}
                 value={value}
                 className={cn(
-                  'relative flex flex-1 items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-500 transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-0',
+                  'relative flex flex-1 items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-500 transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-0 cursor-pointer',
                   'data-[state=active]:text-zinc-100'
                 )}
               >
@@ -410,44 +399,45 @@ function SidebarTabs(props: SidebarTabsProps) {
           })}
         </TabsList>
 
-        {/* Scrollable list area */}
-        <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto pt-4 pb-2 px-0.5">
-          <TabsContent
-            className="mt-0 flex h-full flex-col outline-none"
-            value="my-projects"
-          >
-            <SectionHeader
-              icon={LayoutGrid}
-              label="Owned"
-              resultCount={filteredOwned.length}
-            />
-            <ProjectList
-              activeProjectId={activeProjectId}
-              emptyLabel={query ? 'No matching projects' : 'No projects yet'}
-              onDeleteProject={onDeleteProject}
-              onOpenProject={onOpenProject}
-              onRenameProject={onRenameProject}
-              projects={filteredOwned}
-            />
-          </TabsContent>
+        <TabsContent
+          className="sidebar-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y px-0.5 pt-4 pb-2 outline-none"
+          value="my-projects"
+          onWheel={handleSidebarWheel}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <SectionHeader
+            icon={LayoutGrid}
+            label="Owned"
+            resultCount={filteredOwned.length}
+          />
+          <ProjectList
+            activeProjectId={activeProjectId}
+            emptyLabel={query ? 'No matching projects' : 'No projects yet'}
+            onDeleteProject={onDeleteProject}
+            onOpenProject={onOpenProject}
+            onRenameProject={onRenameProject}
+            projects={filteredOwned}
+          />
+        </TabsContent>
 
-          <TabsContent
-            className="mt-0 flex h-full flex-col outline-none"
-            value="shared"
-          >
-            <SectionHeader
-              icon={Users}
-              label="Shared with me"
-              resultCount={filteredShared.length}
-            />
-            <ProjectList
-              activeProjectId={activeProjectId}
-              emptyLabel={query ? 'No matching shared projects' : 'Nothing shared yet'}
-              onOpenProject={onOpenProject}
-              projects={filteredShared}
-            />
-          </TabsContent>
-        </div>
+        <TabsContent
+          className="sidebar-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y px-0.5 pt-4 pb-2 outline-none"
+          value="shared"
+          onWheel={handleSidebarWheel}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <SectionHeader
+            icon={Users}
+            label="Shared with me"
+            resultCount={filteredShared.length}
+          />
+          <ProjectList
+            activeProjectId={activeProjectId}
+            emptyLabel={query ? 'No matching shared projects' : 'Nothing shared yet'}
+            onOpenProject={onOpenProject}
+            projects={filteredShared}
+          />
+        </TabsContent>
       </Tabs>
 
       <style jsx global>{`
@@ -483,9 +473,48 @@ function filterProjects(projects: readonly EditorProject[], query: string) {
   )
 }
 
+
+function handleSidebarWheel<T extends HTMLElement>(event: ReactWheelEvent<T>) {
+  const element = event.currentTarget
+  const lineHeight = 16
+  let deltaY = event.deltaY
+  let deltaX = event.deltaX
+
+  if (event.deltaMode === 1) {
+    deltaY *= lineHeight
+    deltaX *= lineHeight
+  } else if (event.deltaMode === 2) {
+    deltaY *= element.clientHeight
+    deltaX *= element.clientWidth
+  }
+
+  if (deltaY === 0 && deltaX === 0) {
+    return
+  }
+
+  const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+  const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth)
+
+  if (deltaY !== 0 && maxScrollTop > 0) {
+    const nextTop = Math.max(0, Math.min(maxScrollTop, element.scrollTop + deltaY))
+    if (nextTop !== element.scrollTop) {
+      element.scrollTop = nextTop
+      event.preventDefault()
+    }
+  }
+
+  if (deltaX !== 0 && maxScrollLeft > 0) {
+    const nextLeft = Math.max(0, Math.min(maxScrollLeft, element.scrollLeft + deltaX))
+    if (nextLeft !== element.scrollLeft) {
+      element.scrollLeft = nextLeft
+      event.preventDefault()
+    }
+  }
+}
+
+
 // --- Section Header ---
 
-// FIX [sidebar L677]: Marked props as readonly via interface
 interface SectionHeaderProps {
   readonly icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>
   readonly label: string
@@ -508,7 +537,6 @@ function SectionHeader({ icon: Icon, label, resultCount }: Readonly<SectionHeade
 
 // --- Project List ---
 
-// FIX [sidebar L687]: Marked props as readonly via interface
 interface ProjectListProps {
   readonly projects: readonly EditorProject[]
   readonly activeProjectId?: string
@@ -602,7 +630,6 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
           : 'border-transparent bg-transparent hover:border-zinc-800/50 hover:bg-zinc-900/35'
       )}
     >
-      {/* Active left-bar accent — FIX [sidebar L619]: w-[2px] → w-0.5 */}
       <motion.div
         aria-hidden="true"
         animate={{
@@ -634,8 +661,6 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
           </div>
         </div>
 
-        {/* FIX [sidebar L644]: role="group" → use <div> without role, wrap in <fieldset> equivalent
-            Sonar S6819 warns against role="group" on div; switched to aria-label only, semantically correct */}
         <div
           className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
           aria-label={`Actions for ${project.name}`}
@@ -643,7 +668,7 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
           {project.owned && onRenameProject && (
             <button
               aria-label={`Rename ${project.name}`}
-              className="flex size-7 items-center justify-center rounded-lg border border-zinc-800/70 bg-zinc-900/60 text-zinc-500 transition-all duration-150 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+              className="flex size-7 items-center justify-center cursor-pointer rounded-lg border border-zinc-800/70 bg-zinc-900/60 text-zinc-500 transition-all duration-150 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
               onClick={(e) => { e.stopPropagation(); onRenameProject(project) }}
               type="button"
             >
@@ -653,7 +678,7 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
           {project.owned && onDeleteProject && (
             <button
               aria-label={`Delete ${project.name}`}
-              className="flex size-7 items-center justify-center rounded-lg border border-zinc-800/70 bg-zinc-900/60 text-zinc-500 transition-all duration-150 hover:border-red-900/50 hover:bg-red-950/50 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+              className="flex size-7 items-center justify-center cursor-pointer rounded-lg border border-zinc-800/70 bg-zinc-900/60 text-zinc-500 transition-all duration-150 hover:border-red-900/50 hover:bg-red-950/50 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
               onClick={(e) => { e.stopPropagation(); onDeleteProject(project) }}
               type="button"
             >
@@ -668,7 +693,6 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
 
 // --- Project Badge ---
 
-// FIX [sidebar L677]: Marked props as readonly
 function ProjectBadge({ label }: Readonly<{ label: string }>) {
   return (
     <span className="shrink-0 rounded-md border border-zinc-800/80 bg-zinc-900 px-1.5 py-px text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
@@ -679,7 +703,6 @@ function ProjectBadge({ label }: Readonly<{ label: string }>) {
 
 // --- Avatar Stack ---
 
-// FIX [sidebar L687]: Marked props as readonly
 function AvatarStack({ avatars, countLabel }: Readonly<{ avatars: string[]; countLabel: string }>) {
   if (avatars.length === 0) return null
 
@@ -691,7 +714,6 @@ function AvatarStack({ avatars, countLabel }: Readonly<{ avatars: string[]; coun
             key={`${avatar}-${i}`}
             aria-hidden="true"
             className={cn(
-              // FIX [sidebar L698]: size-[18px] → size-4.5
               'flex size-4.5 select-none items-center justify-center rounded-full text-[9px] font-bold ring-2 ring-zinc-950 shadow-sm',
               i === 0 && 'bg-zinc-800 text-zinc-300 border border-zinc-700/50',
               i === 1 && 'bg-indigo-950/80 text-indigo-300 border border-indigo-900/60',
@@ -713,21 +735,18 @@ function AvatarStack({ avatars, countLabel }: Readonly<{ avatars: string[]; coun
 
 // --- Empty State ---
 
-// FIX [sidebar L719]: Marked props as readonly
 function EmptyProjectsState({ label = 'No projects yet' }: Readonly<{ label?: string }>) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: 'spring', stiffness: 240, damping: 22 }}
-      // FIX [sidebar L731]: max-w-[180px] → max-w-45 (outer div updated below)
       className="flex min-h-52 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800/60 bg-zinc-900/10 px-4 py-8 text-center"
     >
       <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-600 shadow-sm">
         <FolderOpen className="size-5" aria-hidden="true" />
       </div>
       <p className="text-xs font-semibold text-zinc-400">{label}</p>
-      {/* FIX [sidebar L731]: max-w-[180px] → max-w-45 */}
       <p className="mt-1.5 max-w-45 text-[11px] leading-relaxed text-zinc-600">
         Projects let you isolate and share assets cleanly across your team.
       </p>
@@ -748,7 +767,7 @@ export function SidebarFooter({ onCreateProject }: SidebarFooterProps) {
         whileHover={{ y: -1, scale: 1.01 }}
         whileTap={{ scale: 0.97 }}
         transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-        className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-2.5 text-xs font-semibold text-white outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-indigo-400/60 focus-visible:ring-offset-0"
+        className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-2.5 text-xs font-semibold text-white outline-none transition-shadow duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400/60 focus-visible:ring-offset-0"
         style={{
           background: 'linear-gradient(160deg, #6366f1 0%, #7c3aed 100%)',
           boxShadow: '0 4px 16px rgba(99,102,241,0.22), inset 0 1px 0 rgba(255,255,255,0.18)',
@@ -757,7 +776,6 @@ export function SidebarFooter({ onCreateProject }: SidebarFooterProps) {
         type="button"
         aria-label="Create new project"
       >
-        {/* Shimmer — FIX [sidebar L763]: translate-x-[-100%] → -translate-x-full, bg-gradient-to-r → bg-linear-to-r, translate-x-[100%] → translate-x-full */}
         <span
           aria-hidden="true"
           className="absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/10 to-transparent transition-transform duration-500 group-hover:translate-x-full"
@@ -796,7 +814,6 @@ function getInitials(c: CollaboratorProfile): string {
 function formatRelativeTime(dateInput?: string): string {
   if (!dateInput) return 'Updated recently'
   const ms = new Date(dateInput).getTime()
-  // FIX [sidebar L799]: isNaN → Number.isNaN (Sonar S7773)
   if (Number.isNaN(ms)) return 'Updated recently'
 
   const deltaS = Math.round((Date.now() - ms) / 1000)

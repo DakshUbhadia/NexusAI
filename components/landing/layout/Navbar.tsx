@@ -54,7 +54,7 @@ export default function Navbar() {
       className={[
         "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
         scrolled
-          ? "bg-black/70 backdrop-blur-2xl border-b border-white/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.04)]"
+          ? "bg-black/70 backdrop-blur-2xl border-b border-white/6 shadow-[0_1px_0_rgba(255,255,255,0.04)]"
           : "bg-transparent",
       ].join(" ")}
       role="banner"
@@ -94,7 +94,7 @@ export default function Navbar() {
               >
                 {item.label}
                 <span
-                  className="absolute -bottom-0.5 left-0 w-0 h-px bg-gradient-to-r from-[#06B6D4] to-[#8B5CF6] group-hover:w-full transition-all duration-300"
+                  className="absolute -bottom-0.5 left-0 w-0 h-px bg-linear-to-r from-[#06B6D4] to-[#8B5CF6] group-hover:w-full transition-all duration-300"
                   aria-hidden="true"
                 />
               </a>
@@ -112,7 +112,7 @@ export default function Navbar() {
           </Link>
 
           <button
-            className="md:hidden flex flex-col gap-[5px] p-2 group"
+            className="md:hidden flex flex-col gap-1.25 p-2 group"
             aria-label="Open navigation menu"
             type="button"
           >

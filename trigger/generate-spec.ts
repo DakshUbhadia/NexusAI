@@ -151,7 +151,7 @@ async function generateMarkdownSpec(
   ].join('\n')
 
   const result = await generateText({
-    model: google('gemini-2.5-pro'),
+    model: google('gemini-2.5-flash'),
     temperature: 0.2,
     system: systemPrompt,
     prompt,
