@@ -21,7 +21,7 @@ export function useMouseGlow<T extends HTMLElement = HTMLDivElement>(
 
   useEffect(() => {
     const container = ref.current;
-    if (!container || typeof window === "undefined") return;
+    if (!container || globalThis.window === undefined) return;
 
     // Create glow div
     const glow       = document.createElement("div");

@@ -110,7 +110,7 @@ export async function GET(_req: NextRequest, context: RouteContext): Promise<Res
   try {
     const blob = await readSpecBlob(projectSpec.filePath)
 
-    if (!blob || blob.statusCode !== 200 || !blob.stream) {
+    if (blob?.statusCode !== 200 || !blob?.stream) {
       return errorResponse('Spec file not found.', 'not_found', 404)
     }
 

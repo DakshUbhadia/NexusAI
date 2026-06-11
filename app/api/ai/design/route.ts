@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth as triggerAuth, tasks } from "@trigger.dev/sdk";
 import { z } from "zod";
 
-import { getCurrentClerkIdentity } from "@/lib/project-access";
+import { getCurrentClerkIdentity,hasProjectAccess } from "@/lib/project-access";
 import prisma from "@/lib/prisma";
-import { hasProjectAccess } from "@/lib/project-access";
 import type { designAgent } from "@/trigger/design-agent";
 
 export const runtime = "nodejs";

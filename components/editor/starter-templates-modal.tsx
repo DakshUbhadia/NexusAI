@@ -142,7 +142,7 @@ function renderPreviewShape(node: CanvasNode, scale: number, offsetX: number, of
   return <rect {...commonProps} height={height} rx={10} width={width} x={x} y={y} />
 }
 
-function TemplatePreview({ template }: { template: CanvasTemplate }): ReactElement {
+function TemplatePreview({ template }: Readonly<{ template: CanvasTemplate }>): ReactElement {
   const bounds = calculateBounds(template.nodes)
   const scale = Math.min(
     (PREVIEW_VIEWBOX_WIDTH - PREVIEW_PADDING * 2) / bounds.width,
@@ -239,10 +239,10 @@ function TemplatePreview({ template }: { template: CanvasTemplate }): ReactEleme
 function TemplateCard({
   template,
   onImport,
-}: {
+}: Readonly<{
   template: CanvasTemplate
   onImport: (template: CanvasTemplate) => void
-}): ReactElement {
+}>): ReactElement {
   return (
     <article
       className={cn(
@@ -252,7 +252,7 @@ function TemplateCard({
       )}
     >
       <div className="shrink-0 border-b border-(--border-subtle) bg-(--bg-base) p-3">
-        <div className="aspect-[16/9] w-full overflow-hidden rounded-md border border-(--border-subtle) bg-(--bg-base)">
+        <div className="aspect-video w-full overflow-hidden rounded-md border border-(--border-subtle) bg-(--bg-base)">
           <TemplatePreview template={template} />
         </div>
       </div>
@@ -298,7 +298,7 @@ export function StarterTemplatesModal({
   open,
   onOpenChange,
   onImport,
-}: StarterTemplatesModalProps): ReactElement {
+}: Readonly<StarterTemplatesModalProps>): ReactElement {
   const handleImport = (template: CanvasTemplate): void => {
     onImport(template)
     onOpenChange(false)
@@ -308,7 +308,7 @@ export function StarterTemplatesModal({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
         className={cn(
-          'fixed left-1/2 top-1/2 h-[min(80vh,820px)] !w-[98vw] !max-w-[2400px] -translate-x-1/2 -translate-y-1/2',
+          'fixed left-1/2 top-1/2 h-[min(80vh,820px)] w-[98vw]! max-w-600! -translate-x-1/2 -translate-y-1/2',
           'gap-0 overflow-hidden border border-(--border-default) bg-(--bg-surface-elevated) p-0 text-(--text-primary) shadow-(--shadow-lg)'
         )}
         style={{

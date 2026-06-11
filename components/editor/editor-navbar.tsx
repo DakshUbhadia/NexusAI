@@ -15,7 +15,7 @@ export function EditorNavbar({
   isOpen,
   onToggleSidebar,
   className,
-}: EditorNavbarProps) {
+}: Readonly<EditorNavbarProps>) {
   return (
     <nav
       className={cn(
@@ -37,10 +37,10 @@ export function EditorNavbar({
 export function NavbarLeft({
   isOpen,
   onToggleSidebar,
-}: {
+}: Readonly<{
   isOpen: boolean
   onToggleSidebar: () => void
-}) {
+}>) {
   return (
     <div className="flex items-center gap-2">
       <Button

@@ -40,7 +40,7 @@ export default function HeroSection() {
   // ── Spline viewer mount ──────────────────────────────────────────────────
   useEffect(() => {
     const host = splineHostRef.current;
-    if (!host || typeof window === "undefined") return;
+    if (!host || globalThis.window === undefined) return;
 
     let cancelled = false;
 
@@ -77,15 +77,15 @@ export default function HeroSection() {
       `script[src='${SPLINE_SCRIPT_SRC}']`,
     );
 
-    if (!existingScript) {
+    if (existingScript) {
+      handleReady();
+    } else {
       const script = document.createElement("script");
       script.type = "module";
       script.src = SPLINE_SCRIPT_SRC;
       script.async = true;
       script.onload = handleReady;
       document.head.appendChild(script);
-    } else {
-      handleReady();
     }
 
     return () => {
@@ -279,7 +279,7 @@ export default function HeroSection() {
 
       {/* ── Cursor glow ── */}
       <motion.div
-        className="absolute z-[2] pointer-events-none rounded-full"
+        className="absolute z-2 pointer-events-none rounded-full"
         style={{
           width: 700,
           height: 700,
@@ -294,9 +294,9 @@ export default function HeroSection() {
       />
 
       {/* ── Ambient orbs ── */}
-      {orbsData.map((orb, i) => (
+      {orbsData.map((orb) => (
         <div
-          key={i}
+          key={`${orb.cx}-${orb.cy}-${orb.size}-${orb.color}`}
           className="absolute pointer-events-none rounded-full"
           style={{
             left: orb.cx,
@@ -305,7 +305,7 @@ export default function HeroSection() {
             height: orb.size,
             background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
             transform: "translate(-50%,-50%)",
-            animation: `orbPulse ${orb.dur}s ease-in-out ${i * 1.5}s infinite`,
+            animation: `orbPulse ${orb.dur}s ease-in-out ${orbsData.indexOf(orb) * 1.5}s infinite`,
           }}
           aria-hidden="true"
         />
@@ -313,7 +313,7 @@ export default function HeroSection() {
 
       {/* ── Radial vignette ── */}
       <div
-        className="absolute inset-0 z-[3] pointer-events-none"
+        className="absolute inset-0 z-3 pointer-events-none"
         style={{
           background:
             "radial-gradient(ellipse 90% 90% at 50% 45%, transparent 30%, rgba(0,0,0,0.55) 75%, rgba(0,0,0,0.90) 100%)",
@@ -322,7 +322,7 @@ export default function HeroSection() {
 
       {/* ── Bottom fade ── */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-48 z-[4] pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 h-48 z-4 pointer-events-none"
         style={{
           background: "linear-gradient(to bottom, transparent 0%, #07070E 100%)",
         }}
@@ -333,7 +333,7 @@ export default function HeroSection() {
       {/* ── Hero content ── */}
       <div
         ref={pinWrapRef}
-        className="relative z-[5] flex min-h-screen flex-col items-center justify-center px-6 text-center will-change-transform"
+        className="relative z-5 flex min-h-screen flex-col items-center justify-center px-6 text-center will-change-transform"
       >
         <h1
           className="font-display font-black leading-[0.9] tracking-[-0.04em] text-white mb-6"
@@ -357,7 +357,7 @@ export default function HeroSection() {
 
         <p
           ref={subtitleRef}
-          className="max-w-[480px] text-base md:text-lg font-light leading-[1.65] text-white/50 mb-10 opacity-0"
+          className="max-w-120 text-base md:text-lg font-light leading-[1.65] text-white/50 mb-10 opacity-0"
         >
           Describe your architecture in plain English. Gemini generates a
           validated graph live on your shared canvas. Ship a build-ready spec
@@ -398,7 +398,7 @@ export default function HeroSection() {
           </span>
           <div className="relative w-px h-12 overflow-hidden">
             <div
-              className="absolute top-0 left-0 w-full bg-gradient-to-b from-transparent via-white/40 to-transparent"
+              className="absolute top-0 left-0 w-full bg-linear-to-b from-transparent via-white/40 to-transparent"
               style={{
                 height: "200%",
                 animation: "scrollLine 1.8s ease-in-out infinite",

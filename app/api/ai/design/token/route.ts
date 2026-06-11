@@ -51,7 +51,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     },
   });
 
-  if (!taskRun || taskRun.userId !== userId) {
+  if (taskRun?.userId !== userId) {
     return errorResponse("Run not found.", "not_found", 404);
   }
 

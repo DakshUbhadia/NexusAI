@@ -22,7 +22,9 @@ export const aiChatFeedMessageSchema = z
     sender: z.string().trim().min(1).max(80),
     role: aiChatFeedMessageRoleSchema,
     content: z.string().trim().min(1).max(2000),
-    timestamp: z.string().datetime({ offset: true }),
+    timestamp: z
+      .string()
+      .refine((val) => !Number.isNaN(Date.parse(val)), { message: "Invalid datetime string" }),
   })
   .strict()
 

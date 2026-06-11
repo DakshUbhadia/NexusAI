@@ -5,10 +5,10 @@ import { ReactNode } from "react";
 import { clsx } from "clsx";
 
 interface TiltCardProps {
-  children:         ReactNode;
-  className?:       string;
-  tiltMaxAngleDeg?: number;
-  glareEnabled?:    boolean;
+  readonly children:         ReactNode;
+  readonly className?:       string;
+  readonly tiltMaxAngleDeg?: number;
+  readonly glareEnabled?:    boolean;
 }
 
 export default function TiltCard({
@@ -16,7 +16,7 @@ export default function TiltCard({
   className,
   tiltMaxAngleDeg = 6,
   glareEnabled    = true,
-}: TiltCardProps) {
+}: Readonly<TiltCardProps>) {
   return (
     <Tilt
       tiltMaxAngleX={tiltMaxAngleDeg}

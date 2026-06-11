@@ -3,14 +3,12 @@
 import type { ComponentProps } from 'react'
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-// FIX [dialogs L6]: Removed unused 'X' import (ESLint no-unused-vars / Sonar S1128)
 import { AlertTriangle, FolderPlus, Hash, Loader2, PencilLine } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  // FIX [dialogs L13-14]: Removed unused 'DialogFooter' and 'DialogHeader' imports
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -32,14 +30,11 @@ function getDisplaySlug(value: string): string {
 
 // --- Shared sub-components ---
 
-/** Animated character counter for name inputs */
-// FIX [dialogs L36]: Marked props as readonly (Sonar S6759)
 function CharCount({ value, max = 60 }: Readonly<{ value: string; max?: number }>) {
   const remaining = max - value.length
   const isNear = remaining <= 10
   const isOver = remaining < 0
 
-  // FIX [dialogs L49]: Extracted nested ternary into independent statements (Sonar S3358)
   let colorClass = 'text-zinc-600'
   if (isOver) colorClass = 'text-red-400'
   else if (isNear) colorClass = 'text-amber-400'
@@ -57,7 +52,6 @@ function CharCount({ value, max = 60 }: Readonly<{ value: string; max?: number }
   )
 }
 
-/** Slug / Room ID display block */
 interface SlugPreviewProps {
   readonly id: string
   readonly label: string
@@ -78,7 +72,6 @@ function SlugPreview({ id, label, value, specialChars }: SlugPreviewProps) {
         </label>
       </div>
 
-      {/* FIX [dialogs L81]: min-h-[2.25rem] → min-h-9 (Tailwind canonical) */}
       <div
         id={id}
         aria-readonly="true"
@@ -108,8 +101,6 @@ function SlugPreview({ id, label, value, specialChars }: SlugPreviewProps) {
   )
 }
 
-/** Consistent field label */
-// FIX [dialogs L108]: Marked props as readonly (Sonar S6759)
 function FieldLabel({ htmlFor, children }: Readonly<{ htmlFor: string; children: React.ReactNode }>) {
   return (
     <label htmlFor={htmlFor} className="text-xs font-medium text-zinc-400">
@@ -118,7 +109,6 @@ function FieldLabel({ htmlFor, children }: Readonly<{ htmlFor: string; children:
   )
 }
 
-/** Primary action button with animated loading state */
 interface ActionButtonProps {
   readonly isLoading: boolean
   readonly disabled?: boolean
@@ -129,11 +119,6 @@ interface ActionButtonProps {
   readonly onClick?: () => void
 }
 
-// FIX [dialogs L343 / Sonar S4144]: Both handleSubmit functions in Create and Rename were
-// identical — extracted into this shared ActionButton which is already reused. The duplicate
-// handleSubmit logic itself is kept minimal and separated by component scope (no shared state),
-// so the duplication warning is addressed by keeping each handler as a thin wrapper with its
-// own validation context. The real duplication was in ActionButton itself which is now shared.
 function ActionButton({
   isLoading,
   disabled,
@@ -150,7 +135,6 @@ function ActionButton({
       disabled={disabled ?? isLoading}
       onClick={onClick}
       className={cn(
-        // FIX [dialogs L135]: min-w-[88px] → min-w-22 (Tailwind canonical)
         'relative min-w-22 gap-2 text-xs font-semibold transition-all',
         variant === 'default' && 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:ring-indigo-500/50',
         variant === 'destructive' && 'bg-red-600/90 text-white hover:bg-red-500 focus-visible:ring-red-500/50'
@@ -351,17 +335,15 @@ export function RenameProjectDialog(props: RenameProjectDialogProps) {
     }
   }, [open])
 
-  // FIX [dialogs L343 / Sonar S4144]: handleSubmit here is contextually distinct from
-  // CreateProjectDialog's — it uses a different unchanged-guard (see below). Kept separate
-  // intentionally; the shared ActionButton already DRYs the rendering side.
+  const unchanged = projectName.trim() === currentProjectName.trim()
+
   const handleSubmit: ComponentProps<'form'>['onSubmit'] = (e) => {
     e.preventDefault()
     const trimmed = projectName.trim()
-    if (!trimmed || trimmed.length > 60) return
+    if (!trimmed || trimmed.length > 60 || unchanged) return
     onSubmit(trimmed, projectSlug)
   }
 
-  const unchanged = projectName.trim() === currentProjectName.trim()
   const slugPreview = projectSlugPreview || getDisplaySlug(projectName)
 
   return (
@@ -472,7 +454,6 @@ export function DeleteProjectDialog(props: DeleteProjectDialogProps) {
 
         {/* Confirmation body */}
         <div className="px-6 py-5 space-y-5">
-          {/* FIX [dialogs L469]: Unescaped apostrophe in "You're" → use &apos; (react/no-unescaped-entities) */}
           <p className="text-sm text-zinc-400 leading-relaxed">
             You&apos;re about to permanently delete{' '}
             <span className="font-semibold text-zinc-200">{projectName}</span>{' '}

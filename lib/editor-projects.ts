@@ -76,7 +76,7 @@ export async function getEditorProjectLists(userId: string, userEmail?: string |
   ])
 
   return {
-    ownedProjects: ownedProjects.map((project) => mapProject(project as PrismaProjectPayload, true)),
-    sharedProjects: sharedProjects.map((project) => mapProject(project as PrismaProjectPayload, false)),
+    ownedProjects: ownedProjects.map((project) => mapProject(project, true)),
+    sharedProjects: sharedProjects.map((project) => mapProject(project, false)),
   }
 }

@@ -41,7 +41,7 @@ function isPublicStoreAccessError(error: unknown): boolean {
   )
 }
 
-async function readCanvasBlob(blobUrl: string): Promise<unknown | null> {
+async function readCanvasBlob(blobUrl: string): Promise<unknown> {
   const result = await get(blobUrl, {
     access: 'private',
     useCache: false,
@@ -55,7 +55,7 @@ async function readCanvasBlob(blobUrl: string): Promise<unknown | null> {
     })
   })
 
-  if (!result || result.statusCode !== 200 || !result.stream) {
+  if (result?.statusCode !== 200 || !result?.stream) {
     return null
   }
 

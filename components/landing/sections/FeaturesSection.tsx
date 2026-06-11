@@ -156,22 +156,24 @@ function ArcCarousel() {
         const pastFocusOnLeft = isLeft && absOff > FOCUS_LEFT_SLOTS;
 
         const scale = isLeft
-          ? Math.max(0.70, 1 - absOff * 0.10)
+          ? Math.max(0.7, 1 - absOff * 0.1)
           : Math.max(0.74, 1 - absOff * 0.085);
 
-        const opacity = pastFocusOnLeft
-          ? Math.max(0.08, 0.40 - (absOff - FOCUS_LEFT_SLOTS) * 0.14)
-          : isLeft
-            ? Math.max(0.55, 1 - absOff * 0.10) // still in focus zone — keep bright
-            : Math.max(0.22, 1 - absOff * 0.26);
+        let opacity: number;
+        if (pastFocusOnLeft) {
+          opacity = Math.max(0.08, 0.4 - (absOff - FOCUS_LEFT_SLOTS) * 0.14);
+        } else if (isLeft) {
+          opacity = Math.max(0.55, 1 - absOff * 0.1);
+        } else {
+          opacity = Math.max(0.22, 1 - absOff * 0.26);
+        }
 
         const zIndex = Math.round(200 - absOff * 20);
 
-        // A card is "in focus" if it is at center OR within the left focus window
         const inFocus = offset >= -FOCUS_LEFT_SLOTS && offset <= 0.5;
 
         const feat           = features[i];
-        const borderOpacity  = inFocus ? 0.55 : 0.10;
+        const borderOpacity  = inFocus ? 0.55 : 0.1;
         const glowOpacity    = inFocus ? 0.18 : 0;
 
         gsap.set(card, {
@@ -391,9 +393,9 @@ function StatCounter({
   label,
   suffix = "",
 }: {
-  to: number;
-  label: string;
-  suffix?: string;
+  readonly to: number;
+  readonly label: string;
+  readonly suffix?: string;
 }) {
   const numRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
