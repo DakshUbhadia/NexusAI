@@ -9,10 +9,6 @@ declare global {
 
 const rawDbUrl = process.env.DATABASE_URL || ''
 
-if (!rawDbUrl) {
-  throw new Error('DATABASE_URL is required to initialize PrismaClient')
-}
-
 function normalizeConnectionString(url: string): string {
   const connectionUrl = url.replace(/^prisma\+/, '')
 
