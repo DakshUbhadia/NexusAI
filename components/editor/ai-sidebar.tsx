@@ -1067,8 +1067,8 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
     }
 
     const runErrorMessage = getRunErrorMessage(realtimeRun.error)
-    const errorSummary = runErrorMessage ? ` ${runErrorMessage}` : ''
-    void sendAssistantMessage(`Nexus AI could not complete this run.${errorSummary}`)
+    const errorSummary = runErrorMessage ? `${runErrorMessage}` : 'Unknown error'
+    void sendAssistantMessage(`Design Generation Failed : ${errorSummary}`)
   }, [activeRun, realtimeRun, sendAssistantMessage])
 
   useEffect(() => {
@@ -1077,7 +1077,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
     
     processedRunIdsRef.current.add(runId)
     setActiveRun(null)
-    void sendAssistantMessage(`Nexus AI run monitoring failed: ${realtimeRunError.message}`)
+    void sendAssistantMessage(`Design Generation Failed : ${realtimeRunError.message}`)
   }, [activeRun, realtimeRunError, sendAssistantMessage])
 
   useEffect(() => {

@@ -1146,8 +1146,9 @@ export const designAgent = schemaTask({
       await setAgentPresence(payload.roomId, {
         cursor: null,
         thinking: false,
-      });
-      await broadcastStatus(payload.roomId, runId, "error", `Nexus AI failed: ${errorMessage}`, 0, 1);
+      }).catch(() => {});
+      
+      await broadcastStatus(payload.roomId, runId, "error", `Design Generation Failed : ${errorMessage}`, 0, 1).catch(() => {});
 
       throw error;
     }
