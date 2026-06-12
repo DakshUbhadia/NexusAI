@@ -21,7 +21,7 @@ if (!triggerProjectRef.startsWith("proj_")) {
 }
 
 export default defineConfig({
-  project: triggerProjectRef,
+  project: "proj_dmbdyaodfvvegtqcqmtu",
   runtime: "node",
   dirs: ["./trigger"],
   maxDuration: 3600,
