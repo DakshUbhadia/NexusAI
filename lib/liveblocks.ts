@@ -56,29 +56,47 @@ export async function ensureRoomAccess(roomId: string, userId: string): Promise<
     [userId]: ['room:write'],
   }
 
+  let room;
   try {
-    const room = await liveblocks.getRoom(roomId)
-    const usersAccesses = room.usersAccesses ?? {}
-    const syncedUsersAccesses = usersAccesses as unknown as Record<
-      string,
-      ['room:write'] | ['room:read', 'room:presence:write'] | null
-    >
+    room = await liveblocks.getRoom(roomId)
+  } catch (error: unknown) {
+    // Only create a new room when Liveblocks definitively says it doesn't exist (404).
+    // Any other error (network, auth, server-side) should surface so it isn't silently
+    // swallowed and the caller can handle it appropriately.
+    const isNotFound =
+      error != null &&
+      typeof error === 'object' &&
+      'status' in error &&
+      (error as { status: number }).status === 404
 
-    if (usersAccesses[userId]) {
-      return
+    if (!isNotFound) {
+      throw error
     }
 
-    await liveblocks.updateRoom(roomId, {
-      usersAccesses: {
-        ...syncedUsersAccesses,
-        ...access,
-      },
-    })
-  } catch (error) {
-    console.error('Failed to load Liveblocks room. Creating a new room.', error)
+    console.log(`Liveblocks room "${roomId}" not found — creating it now.`)
     await liveblocks.createRoom(roomId, {
       usersAccesses: access,
       defaultAccesses: [],
     })
+    return
   }
+
+  // Room exists — make sure this user has write access.
+  const usersAccesses = room.usersAccesses ?? {}
+  const syncedUsersAccesses = usersAccesses as unknown as Record<
+    string,
+    ['room:write'] | ['room:read', 'room:presence:write'] | null
+  >
+
+  if (usersAccesses[userId]) {
+    // User already has explicit access — nothing to do.
+    return
+  }
+
+  await liveblocks.updateRoom(roomId, {
+    usersAccesses: {
+      ...syncedUsersAccesses,
+      ...access,
+    },
+  })
 }

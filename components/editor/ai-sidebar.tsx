@@ -111,6 +111,7 @@ type MessageBubbleProps = {
   readonly content: string
   readonly timestampStr: string
   readonly isMe: boolean
+  readonly isAi?: boolean
 }
 
 type SpecListItemProps = {
@@ -126,6 +127,7 @@ type SpecContentDisplayProps = {
 }
 
 type ArchitectTabProps = {
+  readonly currentSenderName: string
   readonly messages: readonly ChatFeedMessage[]
   readonly isRunActive: boolean
   readonly sharedStatusText: string
@@ -447,15 +449,19 @@ const itemVariants: Variants = {
   },
 }
 
-function MessageBubble({ sender, content, timestampStr, isMe }: MessageBubbleProps) {
+function MessageBubble({ sender, content, timestampStr, isMe, isAi }: MessageBubbleProps) {
   return (
     <motion.div
-      variants={itemVariants}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
       className={cn(
         'max-w-[88%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm',
         isMe
           ? 'ml-auto border border-transparent bg-indigo-500 text-white'
-          : 'mr-auto border border-zinc-800 bg-zinc-900/60 text-zinc-100'
+          : isAi
+            ? 'mr-auto border border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+            : 'mr-auto border border-zinc-800 bg-zinc-800/80 text-zinc-100'
       )}
     >
       <div
@@ -467,7 +473,7 @@ function MessageBubble({ sender, content, timestampStr, isMe }: MessageBubblePro
         <span className="truncate">{sender}</span>
         <span>{timestampStr}</span>
       </div>
-      <p className="whitespace-pre-wrap">{content}</p>
+      <p className="whitespace-pre-wrap break-words">{content}</p>
     </motion.div>
   )
 }
@@ -521,6 +527,7 @@ function SpecContentDisplay({ isLoading, error, content }: SpecContentDisplayPro
 }
 
 function ArchitectTab({
+  currentSenderName,
   messages,
   isRunActive,
   sharedStatusText,
@@ -589,7 +596,8 @@ function ArchitectTab({
                 sender={message.sender}
                 content={message.content}
                 timestampStr={formatMessageTime(message.timestamp, message.createdAt)}
-                isMe={message.role === 'user'}
+                isMe={message.sender === currentSenderName}
+                isAi={message.role === 'assistant'}
               />
             ))}
           </motion.div>
@@ -1382,6 +1390,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                 <div className="mt-3 flex min-h-0 flex-1">
                   <TabsContent className="mt-0 flex min-h-0 w-full flex-col outline-none" value="architect">
                     <ArchitectTab
+                      currentSenderName={currentSenderName}
                       isComposerBusy={isArchitectComposerBusy}
                       isRunActive={isRunActive}
                       messages={architectMessages}

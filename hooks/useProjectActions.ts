@@ -26,6 +26,7 @@ export interface UseProjectActionsReturn {
   }
   loadingState: {
     isLoading: boolean
+    isRedirecting: boolean
   }
   openCreateDialog: () => void
   openRenameDialog: (projectId: string, projectName: string) => void
@@ -78,6 +79,7 @@ export function useProjectActions(options: UseProjectActionsOptions = {}): UsePr
     specialCharacters: [] as string[],
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const [roomIdSuffix, setRoomIdSuffix] = useState('')
 
   const setFormName = (name: string) => {
@@ -153,9 +155,11 @@ export function useProjectActions(options: UseProjectActionsOptions = {}): UsePr
 
       const project = await response.json()
       closeDialog()
+      setIsRedirecting(true)
       router.push(`/editor/${encodeURIComponent(project.id)}`)
-    } finally {
+    } catch (error) {
       setIsLoading(false)
+      throw error
     }
   }
 
@@ -219,7 +223,7 @@ export function useProjectActions(options: UseProjectActionsOptions = {}): UsePr
   return {
     dialogState,
     formState,
-    loadingState: { isLoading },
+    loadingState: { isLoading, isRedirecting },
     openCreateDialog,
     openRenameDialog,
     openDeleteDialog,
