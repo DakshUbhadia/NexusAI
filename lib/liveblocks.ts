@@ -6,20 +6,22 @@ declare global {
   var __liveblocksClient: Liveblocks | undefined
 }
 
-const secret = process.env.LIVEBLOCKS_SECRET_KEY
+export function getLiveblocksClient(): Liveblocks {
+  if (globalThis.__liveblocksClient) {
+    return globalThis.__liveblocksClient;
+  }
 
-if (!secret) {
-  throw new Error('LIVEBLOCKS_SECRET_KEY is required to initialize Liveblocks')
-}
+  const secret = process.env.LIVEBLOCKS_SECRET_KEY;
+  if (!secret) {
+    throw new Error('LIVEBLOCKS_SECRET_KEY is required to initialize Liveblocks');
+  }
 
-const createClient = () => new Liveblocks({ secret })
-
-export const liveblocks =
-  globalThis.__liveblocksClient ??
-  createClient()
-
-if (process.env.NODE_ENV === 'development') {
-  globalThis.__liveblocksClient = liveblocks
+  const client = new Liveblocks({ secret });
+  if (process.env.NODE_ENV === 'development') {
+    globalThis.__liveblocksClient = client;
+  }
+  
+  return client;
 }
 
 const presencePalette = [
@@ -49,6 +51,7 @@ export function getPresenceColor(userId: string): PresenceColor {
 }
 
 export async function ensureRoomAccess(roomId: string, userId: string): Promise<void> {
+  const liveblocks = getLiveblocksClient();
   const access: Record<string, ['room:write']> = {
     [userId]: ['room:write'],
   }

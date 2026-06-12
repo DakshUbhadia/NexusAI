@@ -4,7 +4,7 @@ import { schemaTask } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 import prisma from "../lib/prisma";
-import { liveblocks } from "../lib/liveblocks";
+import { getLiveblocksClient } from "../lib/liveblocks";
 import {
   AI_STATUS_FEED_ID,
   aiStatusFeedMessageSchema,
@@ -974,7 +974,7 @@ async function broadcastStatus(
     timestamp: new Date().toISOString(),
   };
 
-  await liveblocks.broadcastEvent(roomId, event);
+  await getLiveblocksClient().broadcastEvent(roomId, event);
   await publishAiStatus(roomId, {
     active: phase === "start" || phase === "processing",
     text: message,
@@ -996,7 +996,7 @@ function isFeedAlreadyExistsError(error: unknown): boolean {
 
 async function ensureAiStatusFeed(roomId: string): Promise<void> {
   try {
-    await liveblocks.createFeed({
+    await getLiveblocksClient().createFeed({
       roomId,
       feedId: AI_STATUS_FEED_ID,
       metadata: {
@@ -1037,7 +1037,7 @@ async function publishAiStatus(roomId: string, payload: AiStatusFeedMessage): Pr
 
   try {
     await ensureAiStatusFeed(roomId);
-    await liveblocks.createFeedMessage({
+    await getLiveblocksClient().createFeedMessage({
       roomId,
       feedId: AI_STATUS_FEED_ID,
       data: parsedPayload.data,
@@ -1051,7 +1051,7 @@ async function setAgentPresence(
   roomId: string,
   presence: { cursor: { x: number; y: number } | null; thinking: boolean }
 ): Promise<void> {
-  await liveblocks.setPresence(roomId, {
+  await getLiveblocksClient().setPresence(roomId, {
     userId: AI_AGENT_USER_ID,
     data: presence,
     userInfo: {
@@ -1101,7 +1101,7 @@ export const designAgent = schemaTask({
     }
 
     try {
-      const storage = await liveblocks.getStorageDocument(payload.roomId, "json");
+      const storage = await getLiveblocksClient().getStorageDocument(payload.roomId, "json");
       const currentFlow = parseFlowPayload(storage);
 
       await broadcastStatus(
@@ -1115,7 +1115,7 @@ export const designAgent = schemaTask({
 
       const generatedFlow = await buildGeneratedFlow(payload.prompt, currentFlow);
 
-      await liveblocks.mutateStorage(payload.roomId, ({ root }) => {
+      await getLiveblocksClient().mutateStorage(payload.roomId, ({ root }) => {
         setFlowStorage(root, generatedFlow);
       });
 
