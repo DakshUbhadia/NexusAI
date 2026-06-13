@@ -166,11 +166,11 @@ export const generateSpec = schemaTask({
   schema: generateSpecPayloadSchema,
   maxDuration: 1800,
   retry: {
-    maxAttempts: 3,
-    factor: 1.8,
-    minTimeoutInMs: 1000,
-    maxTimeoutInMs: 30000,
-    randomize: false,
+    maxAttempts: 4,
+    factor: 2,
+    minTimeoutInMs: 5000,
+    maxTimeoutInMs: 60000,
+    randomize: true,
   },
   run: async (payload, { ctx }) => {
     const runId = ctx.run.id
