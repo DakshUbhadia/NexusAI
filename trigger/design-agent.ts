@@ -763,6 +763,7 @@ function normalizeGeneratedFlow(flow: CanvasFlow, prompt: string): CanvasFlow {
       type: "canvasNode" as const,
       data: {
         ...node.data,
+        ...node.data,
         label: canonicalizeArchitectureLabel(node.data.label || "Untitled step"),
       },
     }));
@@ -1069,6 +1070,13 @@ export const designAgent = schemaTask({
     "Gemini-powered collaborative design agent that generates a full canvas graph and writes it once to Liveblocks.",
   schema: designAgentPayloadSchema,
   maxDuration: 1800,
+  retry: {
+    maxAttempts: 4,
+    factor: 2,
+    minTimeoutInMs: 5000,
+    maxTimeoutInMs: 60000,
+    randomize: true,
+  },
   run: async (payload, { ctx }) => {
     const runId = ctx.run.id;
 
