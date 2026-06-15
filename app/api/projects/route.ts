@@ -1,39 +1,71 @@
-import { NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
+import { z } from 'zod'
 
-export async function GET() {
-  const { userId } = await auth()
+import prisma from '@/lib/prisma'
 
-  if (!userId) {
-    return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 })
-  }
+const createProjectSchema = z.object({
+  name: z.string().trim().min(1).max(255).optional(),
+})
 
-  const prisma = (await import("../../../lib/prisma")).default
-  const projects = await prisma.project.findMany({
-    where: { ownerId: userId },
-    orderBy: { updatedAt: "desc" },
-  })
-
-  return NextResponse.json(projects)
+function errorResponse(message: string, code: string, status: number): Response {
+  return NextResponse.json({ error: { message, code } }, { status })
 }
 
-export async function POST(req: Request) {
+export async function GET(): Promise<Response> {
   const { userId } = await auth()
 
   if (!userId) {
-    return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 })
+    return errorResponse('Authentication required.', 'unauthorized', 401)
   }
 
-  const body = await req.json().catch(() => ({}))
-  const name = (body?.name as string) || "Untitled Project"
+  const projects = await prisma.project.findMany({
+    where: { ownerId: userId },
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  })
 
-  const prisma = (await import("../../../lib/prisma")).default
+  return NextResponse.json({ data: projects })
+}
+
+export async function POST(req: Request): Promise<Response> {
+  const { userId } = await auth()
+
+  if (!userId) {
+    return errorResponse('Authentication required.', 'unauthorized', 401)
+  }
+
+  const payload = await req.json().catch(() => null)
+  const parsed = createProjectSchema.safeParse(payload ?? {})
+
+  if (!parsed.success) {
+    return errorResponse('Project payload is invalid.', 'bad_request', 400)
+  }
+
+  const name = parsed.data.name ?? 'Untitled Project'
+
   const project = await prisma.project.create({
     data: {
       ownerId: userId,
       name,
     },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      status: true,
+      ownerId: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   })
 
-  return new Response(JSON.stringify(project), { status: 201 })
+  return NextResponse.json({ data: project }, { status: 201 })
 }

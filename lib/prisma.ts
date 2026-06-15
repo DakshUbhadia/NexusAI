@@ -7,7 +7,13 @@ declare global {
   var __prismaClient: PrismaClient | undefined
 }
 
-const rawDbUrl = process.env.DATABASE_URL || ''
+const rawDbUrl = process.env.DATABASE_URL
+if (!rawDbUrl) {
+  throw new Error(
+    'DATABASE_URL environment variable is required but was not set. ' +
+      'Check your .env.local or deployment environment configuration.'
+  )
+}
 
 function normalizeConnectionString(url: string): string {
   const connectionUrl = url.replace(/^prisma\+/, '')

@@ -1,17 +1,17 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
   serverExternalPackages: ['@liveblocks/node'],
-  transpilePackages: ['gsap'],   // ← ADD this line
+  transpilePackages: ['gsap'],
   images: {
     remotePatterns: [
-      // ...your existing patterns...
-      { protocol: 'https', hostname: '**.unsplash.com' },  // ← ADD if needed
+      { protocol: 'https', hostname: '**.unsplash.com' },
+      { protocol: 'https', hostname: 'img.clerk.com' },
     ],
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig

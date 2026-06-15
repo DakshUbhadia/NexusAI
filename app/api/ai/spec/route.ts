@@ -12,9 +12,9 @@ export const runtime = 'nodejs'
 
 const specRequestSchema = z.object({
   roomId: z.string().trim().min(1),
-  chatHistory: z.array(aiChatFeedMessageSchema),
-  nodes: z.array(canvasNodeSchema),
-  edges: z.array(canvasEdgeSchema),
+  chatHistory: z.array(aiChatFeedMessageSchema).max(200),
+  nodes: z.array(canvasNodeSchema).max(500),
+  edges: z.array(canvasEdgeSchema).max(1000),
 })
 
 function errorResponse(message: string, code: string, status: number): Response {

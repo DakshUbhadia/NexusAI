@@ -33,8 +33,13 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   // For auth routes (sign-in / sign-up): do NOT auto-redirect signed-in users.
-  // The sign-in page itself handles force sign-out of any lingering session
-  // via the ForceSignOut client component, ensuring a fresh login every visit.
+  // The ForceSignOut client component rendered on those pages intentionally
+  // destroys any active session so the user always authenticates manually.
+  // If we redirected authenticated users away here, ForceSignOut would never
+  // run and lingering sessions would bypass the mandatory re-authentication.
+  if (isAuthRoute(req)) {
+    return NextResponse.next();
+  }
 
   return NextResponse.next();
 });

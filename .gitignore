@@ -19,6 +19,13 @@ context/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+.understand-anything
+run_assemble.js
+run_file_analyzer.js
+run_fingerprints_input.js
+run_layers.js
+run_save.js
+run_tour.js
 
 # testing
 /coverage

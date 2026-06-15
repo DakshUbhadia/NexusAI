@@ -43,7 +43,9 @@ export function getPresenceColor(userId: string): PresenceColor {
   let hash = 0
   for (let index = 0; index < userId.length; index += 1) {
     const codePoint = userId.codePointAt(index) ?? 0
-    hash = Math.trunc(hash * 31 + codePoint)
+    // Use bitwise OR 0 to truncate to a 32-bit signed integer, preventing
+    // floating-point overflow that would cause an incorrect modulo result.
+    hash = ((hash * 31) + codePoint) | 0
   }
 
   const paletteIndex = Math.abs(hash) % presencePalette.length

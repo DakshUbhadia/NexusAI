@@ -137,9 +137,14 @@ async function generateMarkdownSpec(
   '7. Detailed Task Breakdowns: Granular engineering tasks for each phase. Skip basic setup steps (like "init repo") and focus on complex business logic, state management, and integration points.'
 ].join('\n');
 
+  // Sanitize IDs before inserting into the prompt to prevent injection.
+  // cuid() IDs are alphanumeric + hyphens; strip anything else.
+  const safeProjectId = payload.projectId.replace(/[^a-zA-Z0-9-_]/g, '')
+  const safeRoomId = payload.roomId.replace(/[^a-zA-Z0-9-_]/g, '')
+
   const prompt = [
-    `Project ID: ${payload.projectId}`,
-    `Room ID: ${payload.roomId}`,
+    `Project reference: ${safeProjectId}`,
+    `Room reference: ${safeRoomId}`,
     '',
     'Chat context:',
     chatSummary,
@@ -212,7 +217,7 @@ export const generateSpec = schemaTask({
         roomId: payload.roomId,
         specId: projectSpec.id,
         filePath: projectSpec.filePath,
-        markdown,
+        specLength: markdown.length,
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown spec generation failure.'
