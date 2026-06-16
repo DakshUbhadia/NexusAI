@@ -51,8 +51,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     },
   });
 
-  if (taskRun?.userId !== userId) {
-    return errorResponse("Run not found.", "not_found", 404);
+  if (!taskRun) {
+    return errorResponse('Run not found.', 'not_found', 404)
+  }
+
+  if (taskRun.userId !== userId) {
+    return errorResponse('Run not found.', 'not_found', 404)
   }
 
   try {
@@ -62,6 +66,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           runs: [taskRun.runId],
         },
       },
+      expirationTime: '1h',
     });
 
     return NextResponse.json({

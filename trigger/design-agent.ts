@@ -4,7 +4,7 @@ import { schemaTask } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 import prisma from "../lib/prisma";
-import { liveblocks } from "../lib/liveblocks";
+import { getLiveblocksClient } from "../lib/liveblocks";
 import {
   AI_STATUS_FEED_ID,
   aiStatusFeedMessageSchema,
@@ -763,6 +763,7 @@ function normalizeGeneratedFlow(flow: CanvasFlow, prompt: string): CanvasFlow {
       type: "canvasNode" as const,
       data: {
         ...node.data,
+        ...node.data,
         label: canonicalizeArchitectureLabel(node.data.label || "Untitled step"),
       },
     }));
@@ -974,7 +975,7 @@ async function broadcastStatus(
     timestamp: new Date().toISOString(),
   };
 
-  await liveblocks.broadcastEvent(roomId, event);
+  await getLiveblocksClient().broadcastEvent(roomId, event);
   await publishAiStatus(roomId, {
     active: phase === "start" || phase === "processing",
     text: message,
@@ -996,7 +997,7 @@ function isFeedAlreadyExistsError(error: unknown): boolean {
 
 async function ensureAiStatusFeed(roomId: string): Promise<void> {
   try {
-    await liveblocks.createFeed({
+    await getLiveblocksClient().createFeed({
       roomId,
       feedId: AI_STATUS_FEED_ID,
       metadata: {
@@ -1037,7 +1038,7 @@ async function publishAiStatus(roomId: string, payload: AiStatusFeedMessage): Pr
 
   try {
     await ensureAiStatusFeed(roomId);
-    await liveblocks.createFeedMessage({
+    await getLiveblocksClient().createFeedMessage({
       roomId,
       feedId: AI_STATUS_FEED_ID,
       data: parsedPayload.data,
@@ -1051,7 +1052,7 @@ async function setAgentPresence(
   roomId: string,
   presence: { cursor: { x: number; y: number } | null; thinking: boolean }
 ): Promise<void> {
-  await liveblocks.setPresence(roomId, {
+  await getLiveblocksClient().setPresence(roomId, {
     userId: AI_AGENT_USER_ID,
     data: presence,
     userInfo: {
@@ -1069,6 +1070,13 @@ export const designAgent = schemaTask({
     "Gemini-powered collaborative design agent that generates a full canvas graph and writes it once to Liveblocks.",
   schema: designAgentPayloadSchema,
   maxDuration: 1800,
+  retry: {
+    maxAttempts: 4,
+    factor: 2,
+    minTimeoutInMs: 5000,
+    maxTimeoutInMs: 60000,
+    randomize: true,
+  },
   run: async (payload, { ctx }) => {
     const runId = ctx.run.id;
 
@@ -1101,7 +1109,7 @@ export const designAgent = schemaTask({
     }
 
     try {
-      const storage = await liveblocks.getStorageDocument(payload.roomId, "json");
+      const storage = await getLiveblocksClient().getStorageDocument(payload.roomId, "json");
       const currentFlow = parseFlowPayload(storage);
 
       await broadcastStatus(
@@ -1115,7 +1123,7 @@ export const designAgent = schemaTask({
 
       const generatedFlow = await buildGeneratedFlow(payload.prompt, currentFlow);
 
-      await liveblocks.mutateStorage(payload.roomId, ({ root }) => {
+      await getLiveblocksClient().mutateStorage(payload.roomId, ({ root }) => {
         setFlowStorage(root, generatedFlow);
       });
 
@@ -1146,8 +1154,9 @@ export const designAgent = schemaTask({
       await setAgentPresence(payload.roomId, {
         cursor: null,
         thinking: false,
-      });
-      await broadcastStatus(payload.roomId, runId, "error", `Nexus AI failed: ${errorMessage}`, 0, 1);
+      }).catch(() => {});
+      
+      await broadcastStatus(payload.roomId, runId, "error", `Design Generation Failed : ${errorMessage}`, 0, 1).catch(() => {});
 
       throw error;
     }

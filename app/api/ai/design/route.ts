@@ -9,7 +9,7 @@ import type { designAgent } from "@/trigger/design-agent";
 export const runtime = "nodejs";
 
 const designRequestSchema = z.object({
-  prompt: z.string().trim().min(1),
+  prompt: z.string().trim().min(1).max(4000),
   roomId: z.string().trim().min(1),
   projectId: z.string().trim().min(1),
 });

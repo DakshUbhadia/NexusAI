@@ -258,6 +258,18 @@ export default function SignUpPage() {
       ;(el as HTMLElement).style.setProperty("--panel-delay", `${i * 0.12}s`)
     })
 
+    if (globalThis.window !== undefined) {
+      window.history.pushState(null, '', window.location.href)
+      const handlePopState = () => {
+        window.location.href = '/'
+      }
+      window.addEventListener('popstate', handlePopState)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('popstate', handlePopState)
+      }
+    }
+
     return () => clearTimeout(timer)
   }, [])
 

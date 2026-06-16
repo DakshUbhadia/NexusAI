@@ -171,6 +171,13 @@ export async function PUT(req: NextRequest, context: RouteContext): Promise<Resp
     return accessError
   }
 
+  const contentLength = req.headers.get('content-length')
+  const MAX_CANVAS_BYTES = 5 * 1024 * 1024 // 5 MB
+
+  if (contentLength !== null && parseInt(contentLength, 10) > MAX_CANVAS_BYTES) {
+    return errorResponse('Canvas payload is too large.', 'payload_too_large', 413)
+  }
+
   const payload = await req.json().catch(() => null)
   const parsed = saveCanvasSchema.safeParse(payload)
 

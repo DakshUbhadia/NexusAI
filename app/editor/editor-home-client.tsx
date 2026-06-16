@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-import { Plus } from 'lucide-react'
+import { Loader2, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
@@ -79,6 +79,15 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
           </div>
         </section>
       </main>
+
+      {projectActions.loadingState.isRedirecting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="size-8 animate-spin text-indigo-500" />
+            <p className="text-sm font-medium text-zinc-400">Preparing your workspace...</p>
+          </div>
+        </div>
+      )}
 
       <CreateProjectDialog
         isLoading={projectActions.loadingState.isLoading}

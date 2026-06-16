@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { currentUser } from '@clerk/nextjs/server'
 
-import { ensureRoomAccess, getPresenceColor, liveblocks } from '@/lib/liveblocks'
+import { ensureRoomAccess, getPresenceColor, getLiveblocksClient } from '@/lib/liveblocks'
 import { hasProjectAccess } from '@/lib/project-access'
 
 export const runtime = 'nodejs'
@@ -70,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
   await ensureRoomAccess(roomId, identity.userId)
 
   const name = buildDisplayName(user)
-  const { status, body } = await liveblocks.identifyUser(
+  const { status, body } = await getLiveblocksClient().identifyUser(
     identity.userId,
     {
       userInfo: {
