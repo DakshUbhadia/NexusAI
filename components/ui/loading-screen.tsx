@@ -8,18 +8,56 @@ export interface LoadingScreenProps {
 
 export function LoadingScreen({ title, description, fullScreen = true }: LoadingScreenProps): ReactElement {
   return (
-    <div className={`flex w-full items-center justify-center bg-(--bg-base) ${fullScreen ? 'h-screen' : 'h-full'}`} role="status" aria-live="polite">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-xl border border-(--border-default) bg-(--bg-surface) px-6 py-6 text-center shadow-(--shadow-lg)">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-(--border-default) bg-(--bg-subtle)">
-          <div className="h-6 w-6 animate-pulse rounded-full bg-(--accent-primary-muted)" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-(--text-primary)">{title}</p>
-          {description && <p className="mt-2 text-xs text-(--text-muted)">{description}</p>}
-        </div>
-        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-(--bg-subtle)">
-          <div className="h-full w-2/3 animate-pulse rounded-full bg-(--accent-primary-muted)" />
-        </div>
+    <div
+      className={`flex w-full flex-col items-center justify-center gap-5 bg-(--bg-base) ${fullScreen ? 'h-screen' : 'h-full'}`}
+      role="status"
+      aria-live="polite"
+    >
+      {/* Spinner */}
+      <div className="relative flex h-11 w-11 items-center justify-center">
+        {/* Outer spinning ring */}
+        <svg
+          className="absolute inset-0 h-full w-full animate-spin"
+          viewBox="0 0 44 44"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ animationDuration: '1.1s' }}
+          aria-hidden="true"
+        >
+          <circle
+            cx="22"
+            cy="22"
+            r="18"
+            stroke="var(--border-default)"
+            strokeWidth="2"
+          />
+          <path
+            d="M22 4a18 18 0 0 1 18 18"
+            stroke="var(--accent-primary)"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+        {/* Inner glow dot */}
+        <div
+          className="h-2 w-2 rounded-full"
+          style={{
+            background: 'var(--accent-primary)',
+            boxShadow: '0 0 8px 2px var(--accent-glow)',
+          }}
+        />
+      </div>
+
+      {/* Text */}
+      <div className="flex flex-col items-center gap-1.5 text-center">
+        <p className="text-sm font-medium text-(--text-primary)" style={{ fontFamily: 'var(--font-sans)' }}>
+          {title}
+        </p>
+        {description && (
+          <p className="text-xs text-(--text-muted)" style={{ fontFamily: 'var(--font-sans)' }}>
+            {description}
+          </p>
+        )}
       </div>
     </div>
   )
