@@ -259,14 +259,17 @@ export default function SignUpPage() {
     })
 
     if (globalThis.window !== undefined) {
-      window.history.pushState(null, '', window.location.href)
-      const handlePopState = () => {
-        window.location.href = '/'
-      }
-      window.addEventListener('popstate', handlePopState)
-      return () => {
-        clearTimeout(timer)
-        window.removeEventListener('popstate', handlePopState)
+      const isCallback = window.location.pathname.includes('/sso-callback') || window.location.search.includes('__clerk');
+      if (!isCallback) {
+        window.history.pushState(null, '', window.location.href)
+        const handlePopState = () => {
+          window.location.href = '/'
+        }
+        window.addEventListener('popstate', handlePopState)
+        return () => {
+          clearTimeout(timer)
+          window.removeEventListener('popstate', handlePopState)
+        }
       }
     }
 
