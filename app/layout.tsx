@@ -19,6 +19,8 @@ export default function RootLayout({
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
       afterSignOutUrl="/sign-in"
+      signInFallbackRedirectUrl="/editor"
+      signUpFallbackRedirectUrl="/editor"
     >
       <html lang="en" className="dark">
         <body suppressHydrationWarning>
