@@ -38,11 +38,18 @@ export default function ForceSignOut() {
   const { signOut } = useClerk();
   const { isLoaded, isSignedIn } = useAuth();
   const hasSignedOut = useRef(false);
+  const wasInCallback = useRef(isActiveClerkCallback());
+
+  useEffect(() => {
+    if (isActiveClerkCallback()) {
+      wasInCallback.current = true;
+    }
+  });
 
   useEffect(() => {
     if (!isLoaded) return;
 
-    if (isActiveClerkCallback()) return;
+    if (wasInCallback.current || isActiveClerkCallback()) return;
 
     sessionStorage.removeItem("nexus_session_active");
 
