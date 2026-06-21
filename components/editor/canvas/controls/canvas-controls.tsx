@@ -1,3 +1,4 @@
+'use client'
 import React from 'react'
 import { Undo, Redo, Plus, Minus, Maximize2, Trash2 } from 'lucide-react'
 

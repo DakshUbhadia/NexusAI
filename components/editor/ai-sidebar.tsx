@@ -129,6 +129,7 @@ type SpecContentDisplayProps = {
 type ArchitectTabProps = {
   readonly currentSenderName: string
   readonly messages: readonly ChatFeedMessage[]
+  readonly isMessagesLoading: boolean
   readonly isRunActive: boolean
   readonly sharedStatusText: string
   readonly prompt: string
@@ -142,6 +143,7 @@ type ArchitectTabProps = {
 
 type TeamTabProps = {
   readonly messages: readonly CollabChatMessage[]
+  readonly isMessagesLoading: boolean
   readonly currentSenderName: string
   readonly prompt: string
   readonly isComposerBusy: boolean
@@ -529,6 +531,7 @@ function SpecContentDisplay({ isLoading, error, content }: SpecContentDisplayPro
 function ArchitectTab({
   currentSenderName,
   messages,
+  isMessagesLoading,
   isRunActive,
   sharedStatusText,
   prompt,
@@ -561,7 +564,15 @@ function ArchitectTab({
       </div>
 
       <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-3 py-3" onWheel={handleSidebarWheel} style={{ WebkitOverflowScrolling: 'touch' }}>
-        {messages.length === 0 ? (
+        {isMessagesLoading ? (
+          <motion.div
+            variants={itemVariants}
+            className="flex h-full flex-col items-center justify-center gap-3 text-center"
+          >
+            <LoaderCircle className="size-5 animate-spin text-zinc-600" />
+            <p className="text-[11px] text-zinc-600">Loading conversation...</p>
+          </motion.div>
+        ) : messages.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="flex h-full flex-col items-center justify-center text-center"
@@ -644,6 +655,7 @@ function ArchitectTab({
 
 function TeamTab({
   messages,
+  isMessagesLoading,
   currentSenderName,
   prompt,
   isComposerBusy,
@@ -674,7 +686,15 @@ function TeamTab({
       </div>
 
       <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-3 py-3" onWheel={handleSidebarWheel} style={{ WebkitOverflowScrolling: 'touch' }}>
-        {messages.length === 0 ? (
+        {isMessagesLoading ? (
+          <motion.div
+            variants={itemVariants}
+            className="flex h-full flex-col items-center justify-center gap-3 text-center"
+          >
+            <LoaderCircle className="size-5 animate-spin text-zinc-600" />
+            <p className="text-[11px] text-zinc-600">Loading messages...</p>
+          </motion.div>
+        ) : messages.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="flex h-full flex-col items-center justify-center text-center"
@@ -834,8 +854,12 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
   const { messages: statusMessages } = useFeedMessages(AI_STATUS_FEED_ID, {
     limit: 1,
   })
-  const { messages: architectFeedMessages } = useFeedMessages(AI_CHAT_FEED_ID)
-  const { messages: teamFeedMessages } = useFeedMessages(collaborationFeedId)
+  const { messages: architectFeedMessages, isLoading: isArchitectFeedLoading, error: architectFeedError } = useFeedMessages(AI_CHAT_FEED_ID)
+  const { messages: teamFeedMessages, isLoading: isTeamFeedLoading, error: teamFeedError } = useFeedMessages(collaborationFeedId)
+
+  // Treat a feed-not-found error as "done loading" (feed will be created by ensureFeedExists)
+  const isArchitectMessagesLoading = isArchitectFeedLoading && !architectFeedError
+  const isTeamMessagesLoading = isTeamFeedLoading && !teamFeedError
 
   const latestFeedStatus = useMemo(() => {
     const latestMessage = statusMessages?.[0]
@@ -1392,6 +1416,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                     <ArchitectTab
                       currentSenderName={currentSenderName}
                       isComposerBusy={isArchitectComposerBusy}
+                      isMessagesLoading={isArchitectMessagesLoading}
                       isRunActive={isRunActive}
                       messages={architectMessages}
                       onPromptChange={handleArchitectPromptChange}
@@ -1408,6 +1433,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                     <TeamTab
                       currentSenderName={currentSenderName}
                       isComposerBusy={isTeamComposerBusy}
+                      isMessagesLoading={isTeamMessagesLoading}
                       messages={teamMessages}
                       onPromptChange={handleChatPromptChange}
                       onPromptKeyDown={handleTeamPromptKeyDown}

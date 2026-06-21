@@ -153,10 +153,16 @@ export function useProjectActions(options: UseProjectActionsOptions = {}): UsePr
         throw new Error('Failed to create project')
       }
 
-      const project = await response.json()
+      const json = await response.json()
+      const projectId: string = json?.data?.id ?? json?.id
+
+      if (!projectId) {
+        throw new Error('Server did not return a project ID.')
+      }
+
       closeDialog()
       setIsRedirecting(true)
-      router.push(`/editor/${encodeURIComponent(project.id)}`)
+      router.push(`/editor/${encodeURIComponent(projectId)}`)
     } catch (error) {
       setIsLoading(false)
       throw error
