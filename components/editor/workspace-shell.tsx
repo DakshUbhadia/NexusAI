@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   AlertCircle,
@@ -15,6 +15,7 @@ import {
   Share2,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 
 import {
   CreateProjectDialog,
@@ -27,10 +28,14 @@ import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
+import { TourOverlay } from '@/components/editor/onboarding/tour-overlay'
+import { TourHelpButton } from '@/components/editor/onboarding/tour-help-button'
 import { Button } from '@/components/ui/button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
+import { hasSeenTour } from '@/lib/onboarding/storage'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
+import { useOnboardingTour } from '@/hooks/useOnboardingTour'
 import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplate, CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
@@ -83,6 +88,10 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
   const [templateImportRequest, setTemplateImportRequest] =
     useState<CanvasTemplateImportRequest | null>(null)
 
+  const { user } = useUser()
+  const userId = user?.id ?? null
+  const tour = useOnboardingTour(userId)
+
   const selectedOwnedProject = findOwnedProject(
     projectActions.dialogState.projectId,
     ownedProjects
@@ -99,6 +108,28 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
       template,
     }))
   }
+
+  // Auto-trigger project tour for first-time workspace visitors
+  useEffect(() => {
+    if (!userId) return
+    if (hasSeenTour('project', userId)) return
+
+    const timer = setTimeout(() => {
+      tour.start('project')
+    }, 800)
+
+    return () => clearTimeout(timer)
+    // Only run on mount or when userId changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  // Tour action map — connects step action IDs to workspace state changes
+  const tourActions = useMemo<Record<string, () => void>>(() => ({
+    'open-project-sidebar': () => setProjectSidebarOpen(true),
+    'close-project-sidebar': () => setProjectSidebarOpen(false),
+    'open-ai-sidebar': () => setAiSidebarOpen(true),
+    'close-ai-sidebar': () => setAiSidebarOpen(false),
+  }), [])
 
   const saveStatusIcon = (() => {
     if (canvasSaveStatus === 'saving') {
@@ -143,6 +174,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
           <div className="flex items-center gap-2">
             <Button
               className="gap-2 cursor-pointer"
+              data-tour="save-button"
               disabled={!canvasSaveNow || canvasSaveStatus === 'saving'}
               onClick={() => {
                 void canvasSaveNow?.()
@@ -156,16 +188,17 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
                 {getSaveButtonLabel(canvasSaveStatus, canvasSaveErrorMessage)}
               </span>
             </Button>
-            <Button className="gap-2 cursor-pointer" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
+            <Button className="gap-2 cursor-pointer" data-tour="templates-button" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
               <LayoutTemplate className="size-4" />
               Templates
             </Button>
-            <Button className="gap-2 cursor-pointer" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
+            <Button className="gap-2 cursor-pointer" data-tour="share-button" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
               <Share2 className="size-4" />
               Share
             </Button>
             <Button
               className="gap-2 cursor-pointer"
+              data-tour="ai-panel-toggle"
               onClick={() => setAiSidebarOpen((current) => !current)}
               type="button"
               variant="outline"
@@ -173,6 +206,11 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               {aiSidebarOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
               AI Panel
             </Button>
+            <TourHelpButton
+              tourId="project"
+              userId={userId}
+              onStart={tour.start}
+            />
           </div>
         </nav>
 
@@ -273,6 +311,18 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         onImport={handleTemplateImport}
         onOpenChange={setTemplatesOpen}
         open={templatesOpen}
+      />
+
+      {/* Onboarding Tour Overlay */}
+      <TourOverlay
+        step={tour.currentStep}
+        stepIndex={tour.stepIndex}
+        totalSteps={tour.totalSteps}
+        actions={tourActions}
+        onNext={tour.next}
+        onBack={tour.back}
+        onSkip={tour.skip}
+        onFinish={tour.finish}
       />
     </>
   )

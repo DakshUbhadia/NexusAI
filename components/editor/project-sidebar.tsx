@@ -164,6 +164,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         {isOpen && (
           <motion.aside
             key="project-sidebar"
+            data-tour="project-sidebar-panel"
             role="complementary"
             aria-label="Projects sidebar"
             initial="hidden"
@@ -314,6 +315,7 @@ function SidebarTabs(props: SidebarTabsProps) {
         <input
           ref={searchRef}
           aria-label="Search projects"
+          data-tour="project-search"
           className="w-full rounded-xl border border-zinc-800/60 bg-zinc-900/40 py-2.5 pl-9 pr-14 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none transition-all duration-200 focus:border-indigo-500/50 focus:bg-zinc-900/60 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12),0_0_14px_rgba(99,102,241,0.06)]"
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search projects…"
@@ -357,6 +359,7 @@ function SidebarTabs(props: SidebarTabsProps) {
       >
         <TabsList
           className="relative flex h-9 w-full rounded-full border border-zinc-800/50 bg-zinc-900/50 p-1"
+          data-tour="project-tabs"
           role="tablist"
           aria-label="Project categories"
         >
@@ -616,6 +619,7 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
       tabIndex={isInteractive ? 0 : undefined}
       aria-pressed={isInteractive ? isActive : undefined}
       aria-label={isInteractive ? `Open project: ${project.name}` : undefined}
+      {...(isActive ? { 'data-tour': 'active-project-card' } : {})}
       onKeyDown={(e) => {
         if (isInteractive && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault()
@@ -768,6 +772,7 @@ export function SidebarFooter({ onCreateProject }: SidebarFooterProps) {
         whileTap={{ scale: 0.97 }}
         transition={{ type: 'spring', stiffness: 400, damping: 22 }}
         className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-2.5 text-xs font-semibold text-white outline-none transition-shadow duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-400/60 focus-visible:ring-offset-0"
+        data-tour="sidebar-new-project"
         style={{
           background: 'linear-gradient(160deg, #6366f1 0%, #7c3aed 100%)',
           boxShadow: '0 4px 16px rgba(99,102,241,0.22), inset 0 1px 0 rgba(255,255,255,0.18)',

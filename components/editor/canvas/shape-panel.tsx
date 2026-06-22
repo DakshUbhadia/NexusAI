@@ -127,6 +127,7 @@ export function ShapePanel({ className }: ShapePanelProps) {
         'flex items-center gap-2 rounded-full border border-(--border-default) bg-(--bg-overlay) px-4 py-2.5 shadow-(--shadow-lg) backdrop-blur-xl',
         className
       )}
+      data-tour="shape-panel"
     >
       {SHAPES.map((config) => (
         <button

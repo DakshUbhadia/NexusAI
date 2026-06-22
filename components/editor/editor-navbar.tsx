@@ -4,17 +4,20 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react'
 import { UserButton } from '@clerk/nextjs'
+import type { ReactNode } from 'react'
 
 interface EditorNavbarProps {
   isOpen: boolean
   onToggleSidebar: () => void
   className?: string
+  helpButton?: ReactNode
 }
 
 export function EditorNavbar({
   isOpen,
   onToggleSidebar,
   className,
+  helpButton,
 }: Readonly<EditorNavbarProps>) {
   return (
     <nav
@@ -29,7 +32,7 @@ export function EditorNavbar({
     >
       <NavbarLeft isOpen={isOpen} onToggleSidebar={onToggleSidebar} />
       <NavbarCenter />
-      <NavbarRight />
+      <NavbarRight helpButton={helpButton} />
     </nav>
   )
 }
@@ -64,9 +67,10 @@ export function NavbarCenter() {
   return <div className="flex-1 flex items-center justify-center" />
 }
 
-export function NavbarRight() {
+export function NavbarRight({ helpButton }: Readonly<{ helpButton?: ReactNode }>) {
   return (
     <div className="flex items-center gap-2">
+      {helpButton}
       <UserButton
         appearance={{
           elements: {
