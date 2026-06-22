@@ -35,7 +35,11 @@ function normalizeConnectionString(url: string): string {
 const connectionString = normalizeConnectionString(rawDbUrl)
 
 const instantiate = () => {
-  const adapter = new PrismaPg({ connectionString })
+  const adapter = new PrismaPg({ 
+    connectionString,
+    idleTimeoutMillis: 15000,
+    connectionTimeoutMillis: 5000,
+  })
 
   return new PrismaClient({ adapter })
 }
@@ -54,10 +58,19 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
   )
 }
 
+if (globalThis.__prismaClient !== undefined && process.env.NODE_ENV === 'development') {
+  if (!hasRequiredDelegates(globalThis.__prismaClient)) {
+    try {
+      void globalThis.__prismaClient.$disconnect()
+    } catch {
+      // ignore
+    }
+    globalThis.__prismaClient = undefined
+  }
+}
+
 const prisma: PrismaClient = (globalThis.__prismaClient !== undefined && process.env.NODE_ENV === 'development')
-  ? (hasRequiredDelegates(globalThis.__prismaClient)
-    ? globalThis.__prismaClient
-    : instantiate())
+  ? globalThis.__prismaClient
   : instantiate()
 
 if (process.env.NODE_ENV === 'development') globalThis.__prismaClient = prisma

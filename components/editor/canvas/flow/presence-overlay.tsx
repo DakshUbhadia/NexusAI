@@ -121,7 +121,7 @@ export function PresenceOverlay(): ReactElement {
   return (
     <>
       <Panel position="top-right" className="top-4! right-4! m-0!">
-        <div className="pointer-events-auto flex items-center rounded-full border border-(--border-default) bg-(--bg-overlay) px-2.5 py-2 shadow-(--shadow-md) backdrop-blur-xl">
+        <div className="pointer-events-auto flex items-center rounded-full border border-(--border-default) bg-(--bg-overlay) px-2.5 py-2 shadow-(--shadow-md) backdrop-blur-xl" data-tour="presence-avatars">
           {visibleCollaborators.length > 0 ? (
             <>
               <div className="flex items-center -space-x-2">

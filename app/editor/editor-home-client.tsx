@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Loader2, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 
 import { Button } from '@/components/ui/button'
 import { EditorNavbar } from '@/components/editor/editor-navbar'
@@ -13,9 +14,13 @@ import {
   RenameProjectDialog,
 } from '@/components/editor/project-dialogs'
 import { ProjectSidebar } from '@/components/editor/project-sidebar'
+import { TourOverlay } from '@/components/editor/onboarding/tour-overlay'
+import { TourHelpButton } from '@/components/editor/onboarding/tour-help-button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
+import { hasSeenTour } from '@/lib/onboarding/storage'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
+import { useOnboardingTour } from '@/hooks/useOnboardingTour'
 
 interface EditorHomeClientProps extends EditorProjectLists {
   readonly activeProjectId?: string
@@ -32,8 +37,11 @@ function findProjectById(projectId: string | undefined, projects: readonly { id:
 export function EditorHomeClient(props: EditorHomeClientProps) {
   const { ownedProjects, sharedProjects, activeProjectId } = props
   const router = useRouter()
+  const { user } = useUser()
+  const userId = user?.id ?? null
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const projectActions = useProjectActions({ activeProjectId })
+  const tour = useOnboardingTour(userId)
 
   const selectedOwnedProject = findProjectById(
     projectActions.dialogState.projectId,
@@ -44,11 +52,41 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
       ? ownedProjects.find((project) => project.id === projectActions.dialogState.projectId)
       : undefined
 
+  // Auto-trigger home tour for first-time users with no projects
+  useEffect(() => {
+    if (!userId) return
+    if (ownedProjects.length > 0 || sharedProjects.length > 0) return
+    if (hasSeenTour('home', userId)) return
+
+    // Small delay so page paints first
+    const timer = setTimeout(() => {
+      tour.start('home')
+    }, 600)
+
+    return () => clearTimeout(timer)
+    // Only run on mount or when userId changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  const tourActions = useMemo<Record<string, () => void>>(() => ({}), [])
+
+  const helpButton = useMemo(
+    () => (
+      <TourHelpButton
+        tourId="home"
+        userId={userId}
+        onStart={tour.start}
+      />
+    ),
+    [userId, tour.start],
+  )
+
   return (
     <>
       <EditorNavbar
         isOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((current) => !current)}
+        helpButton={helpButton}
       />
 
       <ProjectSidebar
@@ -72,7 +110,13 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
               Start a new architecture workspace, or choose a project from the sidebar.
             </p>
 
-            <Button className="mt-8 gap-2" onClick={projectActions.openCreateDialog} size="lg" type="button">
+            <Button
+              className="mt-8 gap-2"
+              data-tour="new-project-cta"
+              onClick={projectActions.openCreateDialog}
+              size="lg"
+              type="button"
+            >
               <Plus className="size-4" />
               New Project
             </Button>
@@ -133,6 +177,18 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
         onSubmit={projectActions.submitDeleteProject}
         open={projectActions.dialogState.type === 'delete'}
         projectName={selectedDeleteProject?.name ?? 'this project'}
+      />
+
+      {/* Onboarding Tour Overlay */}
+      <TourOverlay
+        step={tour.currentStep}
+        stepIndex={tour.stepIndex}
+        totalSteps={tour.totalSteps}
+        actions={tourActions}
+        onNext={tour.next}
+        onBack={tour.back}
+        onSkip={tour.skip}
+        onFinish={tour.finish}
       />
     </>
   )

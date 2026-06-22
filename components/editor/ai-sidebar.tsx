@@ -844,6 +844,8 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
   const [activeRun, setActiveRun] = useState<ActiveRunState | null>(null)
   const [activeSpecRun, setActiveSpecRun] = useState<ActiveSpecRunState | null>(null)
 
+  const [feedsReady, setFeedsReady] = useState(false)
+
   const createFeed = useCreateFeed()
   const createFeedMessage = useCreateFeedMessage()
   const self = useSelf((current) => current)
@@ -851,15 +853,16 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
   const collaborationFeedId = useMemo(() => `${COLLAB_CHAT_FEED_ID}:${roomId}`, [roomId])
 
-  const { messages: statusMessages } = useFeedMessages(AI_STATUS_FEED_ID, {
+  const { messages: statusMessages } = useFeedMessages(feedsReady ? AI_STATUS_FEED_ID : 'wait-status', {
     limit: 1,
   })
-  const { messages: architectFeedMessages, isLoading: isArchitectFeedLoading, error: architectFeedError } = useFeedMessages(AI_CHAT_FEED_ID)
-  const { messages: teamFeedMessages, isLoading: isTeamFeedLoading, error: teamFeedError } = useFeedMessages(collaborationFeedId)
+  const { messages: architectFeedMessages, isLoading: isArchitectFeedLoading, error: architectFeedError } = useFeedMessages(feedsReady ? AI_CHAT_FEED_ID : 'wait-ai')
+  const { messages: teamFeedMessages, isLoading: isTeamFeedLoading, error: teamFeedError } = useFeedMessages(feedsReady ? collaborationFeedId : 'wait-team')
 
   // Treat a feed-not-found error as "done loading" (feed will be created by ensureFeedExists)
-  const isArchitectMessagesLoading = isArchitectFeedLoading && !architectFeedError
-  const isTeamMessagesLoading = isTeamFeedLoading && !teamFeedError
+  // Also force loading state while feeds are being initialized
+  const isArchitectMessagesLoading = !feedsReady || (isArchitectFeedLoading && !architectFeedError)
+  const isTeamMessagesLoading = !feedsReady || (isTeamFeedLoading && !teamFeedError)
 
   const latestFeedStatus = useMemo(() => {
     const latestMessage = statusMessages?.[0]
@@ -1044,8 +1047,13 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
       }
     }
 
-    void ensureFeedExists(AI_CHAT_FEED_ID, 'AI Chat')
-    void ensureFeedExists(collaborationFeedId, 'Team Chat')
+    async function initFeeds() {
+      await ensureFeedExists(AI_CHAT_FEED_ID, 'AI Chat')
+      await ensureFeedExists(collaborationFeedId, 'Team Chat')
+      if (!cancelled) setFeedsReady(true)
+    }
+
+    void initFeeds()
 
     return () => {
       cancelled = true
@@ -1315,6 +1323,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
         <motion.aside
           key="ai-sidebar"
           aria-label="AI Sidebar"
+          data-tour="ai-sidebar-panel"
           className="relative flex h-full shrink-0 flex-col overflow-hidden border-l border-zinc-800/50 bg-zinc-950 text-zinc-100 shadow-2xl"
           initial="hidden"
           animate="visible"
@@ -1364,9 +1373,10 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                 onValueChange={(value) => setActiveTab(value as SidebarTab)}
                 value={activeTab}
               >
-                <TabsList className="relative grid h-9 w-full shrink-0 grid-cols-3 rounded-full border border-zinc-800/40 bg-zinc-900 p-1">
+                <TabsList className="relative grid h-9 w-full shrink-0 grid-cols-3 rounded-full border border-zinc-800/40 bg-zinc-900 p-1" data-tour="ai-tabs-list">
                   <TabsTrigger
                     className="relative flex items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-400 transition-all duration-200 data-[state=active]:text-zinc-100 cursor-pointer"
+                    data-tour="ai-tab-architect"
                     value="architect"
                   >
                     {activeTab === 'architect' && (
@@ -1382,6 +1392,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
                   <TabsTrigger
                     className="relative flex items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-400 transition-all duration-200 data-[state=active]:text-zinc-100 cursor-pointer"
+                    data-tour="ai-tab-team"
                     value="team"
                   >
                     {activeTab === 'team' && (
@@ -1397,6 +1408,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
                   <TabsTrigger
                     className="relative flex items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-400 transition-all duration-200 data-[state=active]:text-zinc-100 cursor-pointer"
+                    data-tour="ai-tab-specs"
                     value="specs"
                   >
                     {activeTab === 'specs' && (
