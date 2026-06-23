@@ -17,7 +17,7 @@ import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { TourOverlay } from '@/components/editor/onboarding/tour-overlay'
 import { TourHelpButton } from '@/components/editor/onboarding/tour-help-button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
-import { hasSeenTour } from '@/lib/onboarding/storage'
+import { hasSeenTour, markTourSeen } from '@/lib/onboarding/storage'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { useOnboardingTour } from '@/hooks/useOnboardingTour'
@@ -55,8 +55,13 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
   // Auto-trigger home tour for first-time users with no projects
   useEffect(() => {
     if (!userId) return
-    if (ownedProjects.length > 0 || sharedProjects.length > 0) return
     if (hasSeenTour('home', userId)) return
+
+    if (ownedProjects.length > 0 || sharedProjects.length > 0) {
+      markTourSeen('home', userId)
+      markTourSeen('project', userId)
+      return
+    }
 
     // Small delay so page paints first
     const timer = setTimeout(() => {
@@ -66,7 +71,7 @@ export function EditorHomeClient(props: EditorHomeClientProps) {
     return () => clearTimeout(timer)
     // Only run on mount or when userId changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [userId, ownedProjects.length, sharedProjects.length])
 
   const tourActions = useMemo<Record<string, () => void>>(() => ({}), [])
 
