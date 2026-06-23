@@ -32,7 +32,7 @@ import { TourOverlay } from '@/components/editor/onboarding/tour-overlay'
 import { TourHelpButton } from '@/components/editor/onboarding/tour-help-button'
 import { Button } from '@/components/ui/button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
-import { hasSeenTour } from '@/lib/onboarding/storage'
+import { hasSeenTour, markTourSeen } from '@/lib/onboarding/storage'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { useOnboardingTour } from '@/hooks/useOnboardingTour'
@@ -114,6 +114,15 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
     if (!userId) return
     if (hasSeenTour('project', userId)) return
 
+    const createdAt = user?.createdAt
+    const isOldAccount = createdAt ? (Date.now() - new Date(createdAt).getTime() > 24 * 60 * 60 * 1000) : false
+    
+    // If they already have multiple projects or their account is older than 24h, skip the tour
+    if (isOldAccount || ownedProjects.length + sharedProjects.length > 1) {
+      markTourSeen('project', userId)
+      return
+    }
+
     const timer = setTimeout(() => {
       tour.start('project')
     }, 800)
@@ -121,7 +130,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
     return () => clearTimeout(timer)
     // Only run on mount or when userId changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [userId, user?.createdAt, ownedProjects.length, sharedProjects.length])
 
   // Tour action map — connects step action IDs to workspace state changes
   const tourActions = useMemo<Record<string, () => void>>(() => ({
