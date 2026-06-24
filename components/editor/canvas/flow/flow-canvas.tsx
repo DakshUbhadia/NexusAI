@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 
+import { useUser } from '@clerk/nextjs'
+
 import {
   addEdge,
   applyEdgeChanges,
@@ -19,7 +21,7 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react'
-import { Check, PencilLine, Trash2, X } from 'lucide-react'
+import { Check, Lock, PencilLine, Trash2, X } from 'lucide-react'
 import {
   useCanRedo,
   useCanUndo,
@@ -29,6 +31,7 @@ import {
   useStorage,
   useUndo,
   useUpdateMyPresence,
+  useEventListener,
 } from '@liveblocks/react/suspense'
 
 import { CanvasEdgeRenderer } from '@/components/editor/canvas/edges/canvas-edge'
@@ -218,6 +221,40 @@ function getPlacementPosition(
 }
 
 export function FlowCanvas(props: FlowCanvasProps): ReactElement {
+  const { user } = useUser()
+  const [accessDenied, setAccessDenied] = useState(false)
+
+  useEventListener(({ event }) => {
+    if (event.type === 'access-revoked') {
+      const emailMatch = user?.emailAddresses.some(
+        (e) => e.emailAddress.toLowerCase() === event.email.toLowerCase()
+      )
+      if (emailMatch) {
+        setAccessDenied(true)
+      }
+    }
+  })
+
+  if (accessDenied) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center bg-(--bg-base)">
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-indigo-500/20 bg-indigo-500/5">
+            <Lock className="size-6 text-zinc-300" />
+          </div>
+          <h2 className="mb-3 text-2xl font-bold tracking-tight text-white">Access denied</h2>
+          <p className="text-zinc-400">You do not have permission to view this workspace.</p>
+          <a
+            href="/editor"
+            className="mt-8 rounded-full bg-cyan-400 px-6 py-2.5 text-sm font-medium text-black transition-colors hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-(--bg-base)"
+          >
+            Back to projects
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full w-full">
       <ReactFlowProvider>

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { clerkClient } from '@clerk/nextjs/server'
 
 import prisma from '@/lib/prisma'
+import { getLiveblocksClient } from '@/lib/liveblocks'
 import { getCurrentClerkIdentity, hasProjectAccess } from '@/lib/project-access'
 import type {
   CollaboratorInviteData,
@@ -294,6 +295,16 @@ export async function DELETE(req: NextRequest, context: RouteContext): Promise<R
       },
     },
   })
+
+  try {
+    const liveblocks = getLiveblocksClient()
+    await liveblocks.broadcastEvent(projectId, {
+      type: 'access-revoked',
+      email: normalizedEmail,
+    })
+  } catch (error) {
+    console.error('Failed to broadcast access-revoked event.', error)
+  }
 
   return NextResponse.json({
     data: {
