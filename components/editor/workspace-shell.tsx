@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import {
   AlertCircle,
@@ -15,7 +15,6 @@ import {
   Share2,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useUser } from '@clerk/nextjs'
 
 import {
   CreateProjectDialog,
@@ -28,14 +27,11 @@ import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
-import { TourOverlay } from '@/components/editor/onboarding/tour-overlay'
-import { TourHelpButton } from '@/components/editor/onboarding/tour-help-button'
 import { Button } from '@/components/ui/button'
+import { CreepyButton } from '@/components/ui/creepy-button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
-import { hasSeenTour, markTourSeen } from '@/lib/onboarding/storage'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
-import { useOnboardingTour } from '@/hooks/useOnboardingTour'
 import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplate, CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
@@ -88,10 +84,6 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
   const [templateImportRequest, setTemplateImportRequest] =
     useState<CanvasTemplateImportRequest | null>(null)
 
-  const { user } = useUser()
-  const userId = user?.id ?? null
-  const tour = useOnboardingTour(userId)
-
   const selectedOwnedProject = findOwnedProject(
     projectActions.dialogState.projectId,
     ownedProjects
@@ -108,37 +100,6 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
       template,
     }))
   }
-
-  // Auto-trigger project tour for first-time workspace visitors
-  useEffect(() => {
-    if (!userId) return
-    if (hasSeenTour('project', userId)) return
-
-    const createdAt = user?.createdAt
-    const isOldAccount = createdAt ? (Date.now() - new Date(createdAt).getTime() > 24 * 60 * 60 * 1000) : false
-    
-    // If they already have multiple projects or their account is older than 24h, skip the tour
-    if (isOldAccount || ownedProjects.length + sharedProjects.length > 1) {
-      markTourSeen('project', userId)
-      return
-    }
-
-    const timer = setTimeout(() => {
-      tour.start('project')
-    }, 800)
-
-    return () => clearTimeout(timer)
-    // Only run on mount or when userId changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, user?.createdAt, ownedProjects.length, sharedProjects.length])
-
-  // Tour action map — connects step action IDs to workspace state changes
-  const tourActions = useMemo<Record<string, () => void>>(() => ({
-    'open-project-sidebar': () => setProjectSidebarOpen(true),
-    'close-project-sidebar': () => setProjectSidebarOpen(false),
-    'open-ai-sidebar': () => setAiSidebarOpen(true),
-    'close-ai-sidebar': () => setAiSidebarOpen(false),
-  }), [])
 
   const saveStatusIcon = (() => {
     if (canvasSaveStatus === 'saving') {
@@ -180,46 +141,55 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              className="gap-2 cursor-pointer"
+          <div className="flex items-center gap-1.5">
+            {/* Save */}
+            <button
               data-tour="save-button"
               disabled={!canvasSaveNow || canvasSaveStatus === 'saving'}
-              onClick={() => {
-                void canvasSaveNow?.()
-              }}
+              onClick={() => { void canvasSaveNow?.() }}
               title={canvasSaveErrorMessage ?? undefined}
               type="button"
-              variant="outline"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(6,182,212,0.5)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(6,182,212,0.5)] active:translate-y-[3px] active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-[0_3px_0_0_rgba(6,182,212,0.3)]"
             >
               {saveStatusIcon}
-              <span className="max-w-64 truncate">
+              <span className="max-w-40 truncate">
                 {getSaveButtonLabel(canvasSaveStatus, canvasSaveErrorMessage)}
               </span>
-            </Button>
-            <Button className="gap-2 cursor-pointer" data-tour="templates-button" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
-              <LayoutTemplate className="size-4" />
+            </button>
+
+            {/* Templates */}
+            <button
+              data-tour="templates-button"
+              onClick={() => setTemplatesOpen(true)}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(6,182,212,0.5)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(6,182,212,0.5)] active:translate-y-[3px] active:shadow-none"
+            >
+              <LayoutTemplate className="size-3.5" />
               Templates
-            </Button>
-            <Button className="gap-2 cursor-pointer" data-tour="share-button" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
-              <Share2 className="size-4" />
+            </button>
+
+            {/* Share — CreepyButton (eyeball + tilt) */}
+            <CreepyButton
+              data-tour="share-button"
+              onClick={() => setShareDialogOpen(true)}
+              type="button"
+              className="min-w-0 h-[30px]"
+              coverClassName="bg-zinc-900 border border-cyan-500/50 text-zinc-200 text-xs font-medium px-3 py-1.5 gap-1.5 tracking-normal flex items-center justify-center rounded-lg"
+            >
+              <Share2 className="size-3.5 shrink-0" />
               Share
-            </Button>
-            <Button
-              className="gap-2 cursor-pointer"
+            </CreepyButton>
+
+            {/* AI Panel */}
+            <button
               data-tour="ai-panel-toggle"
               onClick={() => setAiSidebarOpen((current) => !current)}
               type="button"
-              variant="outline"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(124,109,250,0.55)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(124,109,250,0.55)] active:translate-y-[3px] active:shadow-none"
             >
-              {aiSidebarOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+              {aiSidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
               AI Panel
-            </Button>
-            <TourHelpButton
-              tourId="project"
-              userId={userId}
-              onStart={tour.start}
-            />
+            </button>
           </div>
         </nav>
 
@@ -320,18 +290,6 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         onImport={handleTemplateImport}
         onOpenChange={setTemplatesOpen}
         open={templatesOpen}
-      />
-
-      {/* Onboarding Tour Overlay */}
-      <TourOverlay
-        step={tour.currentStep}
-        stepIndex={tour.stepIndex}
-        totalSteps={tour.totalSteps}
-        actions={tourActions}
-        onNext={tour.next}
-        onBack={tour.back}
-        onSkip={tour.skip}
-        onFinish={tour.finish}
       />
     </>
   )

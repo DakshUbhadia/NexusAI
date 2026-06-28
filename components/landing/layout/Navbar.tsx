@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { gsap } from "../../animations/gsapConfig";
+import { RadialGlowButton } from "@/components/ui/radial-glow-button";
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -104,12 +105,14 @@ export default function Navbar() {
 
         {/* Right Side: CTA Button and Mobile Menu */}
         <div className="flex-1 flex justify-end items-center gap-4">
-          <Link
-            href={workspaceHref}
-            className="hidden md:inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold btn-violet"
-          >
-            Open Workspace
-          </Link>
+          <div className="hidden md:inline-flex">
+            <RadialGlowButton
+              onClick={() => { window.location.href = workspaceHref; }}
+              className="text-sm font-semibold"
+            >
+              Open Workspace
+            </RadialGlowButton>
+          </div>
 
           <button
             className="md:hidden flex flex-col gap-1.25 p-2 group"

@@ -6,6 +6,7 @@ import { gsap } from "../../animations/gsapConfig";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Navbar from "../layout/Navbar";
 import MagneticButton from "@/components/ui/MagneticButton";
+import { RadialGlowButton } from "@/components/ui/radial-glow-button";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -366,18 +367,12 @@ export default function HeroSection() {
 
         <div ref={ctaRef} className="flex flex-col items-center gap-6 opacity-0">
           <div className="flex items-center gap-3 flex-wrap justify-center">
-            <MagneticButton
-              href={workspaceHref}
-              className="group relative inline-flex items-center gap-2 px-7 py-3.5 rounded-full text-sm font-semibold text-white overflow-hidden btn-violet"
+            <RadialGlowButton
+              onClick={() => { window.location.href = workspaceHref; }}
+              className="text-sm font-semibold"
             >
-              <span className="relative z-10">Open Workspace</span>
-              <span
-                className="relative z-10 w-5 h-5 rounded-full bg-white/15 flex items-center justify-center text-xs group-hover:bg-white/25 transition-colors"
-                aria-hidden="true"
-              >
-                →
-              </span>
-            </MagneticButton>
+              Open Workspace →
+            </RadialGlowButton>
 
             <a
               href="#how-it-works"
