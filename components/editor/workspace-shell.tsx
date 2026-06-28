@@ -141,16 +141,10 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             </div>
           </div>
 
-<<<<<<< Updated upstream
-          <div className="flex items-center gap-2">
-            <Button
-              className="gap-2 cursor-pointer"
-=======
           <div className="flex items-center gap-1.5">
             {/* Save */}
             <button
               data-tour="save-button"
->>>>>>> Stashed changes
               disabled={!canvasSaveNow || canvasSaveStatus === 'saving'}
               onClick={() => { void canvasSaveNow?.() }}
               title={canvasSaveErrorMessage ?? undefined}
@@ -161,19 +155,6 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               <span className="max-w-40 truncate">
                 {getSaveButtonLabel(canvasSaveStatus, canvasSaveErrorMessage)}
               </span>
-<<<<<<< Updated upstream
-            </Button>
-            <Button className="gap-2 cursor-pointer" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
-              <LayoutTemplate className="size-4" />
-              Templates
-            </Button>
-            <Button className="gap-2 cursor-pointer" onClick={() => setShareDialogOpen(true)} type="button" variant="outline">
-              <Share2 className="size-4" />
-              Share
-            </Button>
-            <Button
-              className="gap-2 cursor-pointer"
-=======
             </button>
 
             {/* Templates */}
@@ -202,24 +183,13 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             {/* AI Panel */}
             <button
               data-tour="ai-panel-toggle"
->>>>>>> Stashed changes
               onClick={() => setAiSidebarOpen((current) => !current)}
               type="button"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(124,109,250,0.55)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(124,109,250,0.55)] active:translate-y-[3px] active:shadow-none"
             >
               {aiSidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
               AI Panel
-<<<<<<< Updated upstream
-            </Button>
-=======
             </button>
-
-            <TourHelpButton
-              tourId="project"
-              userId={userId}
-              onStart={tour.start}
-            />
->>>>>>> Stashed changes
           </div>
         </nav>
 
