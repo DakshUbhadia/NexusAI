@@ -28,6 +28,7 @@ import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
 import { Button } from '@/components/ui/button'
+import { CreepyButton } from '@/components/ui/creepy-button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
@@ -140,21 +141,27 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             </div>
           </div>
 
+<<<<<<< Updated upstream
           <div className="flex items-center gap-2">
             <Button
               className="gap-2 cursor-pointer"
+=======
+          <div className="flex items-center gap-1.5">
+            {/* Save */}
+            <button
+              data-tour="save-button"
+>>>>>>> Stashed changes
               disabled={!canvasSaveNow || canvasSaveStatus === 'saving'}
-              onClick={() => {
-                void canvasSaveNow?.()
-              }}
+              onClick={() => { void canvasSaveNow?.() }}
               title={canvasSaveErrorMessage ?? undefined}
               type="button"
-              variant="outline"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(6,182,212,0.5)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(6,182,212,0.5)] active:translate-y-[3px] active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-[0_3px_0_0_rgba(6,182,212,0.3)]"
             >
               {saveStatusIcon}
-              <span className="max-w-64 truncate">
+              <span className="max-w-40 truncate">
                 {getSaveButtonLabel(canvasSaveStatus, canvasSaveErrorMessage)}
               </span>
+<<<<<<< Updated upstream
             </Button>
             <Button className="gap-2 cursor-pointer" onClick={() => setTemplatesOpen(true)} type="button" variant="outline">
               <LayoutTemplate className="size-4" />
@@ -166,13 +173,53 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
             </Button>
             <Button
               className="gap-2 cursor-pointer"
+=======
+            </button>
+
+            {/* Templates */}
+            <button
+              data-tour="templates-button"
+              onClick={() => setTemplatesOpen(true)}
+              type="button"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(6,182,212,0.5)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(6,182,212,0.5)] active:translate-y-[3px] active:shadow-none"
+            >
+              <LayoutTemplate className="size-3.5" />
+              Templates
+            </button>
+
+            {/* Share — CreepyButton (eyeball + tilt) */}
+            <CreepyButton
+              data-tour="share-button"
+              onClick={() => setShareDialogOpen(true)}
+              type="button"
+              className="min-w-0 h-[30px]"
+              coverClassName="bg-zinc-900 border border-cyan-500/50 text-zinc-200 text-xs font-medium px-3 py-1.5 gap-1.5 tracking-normal flex items-center justify-center rounded-lg"
+            >
+              <Share2 className="size-3.5 shrink-0" />
+              Share
+            </CreepyButton>
+
+            {/* AI Panel */}
+            <button
+              data-tour="ai-panel-toggle"
+>>>>>>> Stashed changes
               onClick={() => setAiSidebarOpen((current) => !current)}
               type="button"
-              variant="outline"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-200 bg-zinc-900 border border-zinc-800 cursor-pointer transition-all duration-100 ease-[cubic-bezier(0,0,0.58,1)] shadow-[0_3px_0_0_rgba(124,109,250,0.55)] hover:translate-y-[1px] hover:shadow-[0_2px_0_0_rgba(124,109,250,0.55)] active:translate-y-[3px] active:shadow-none"
             >
-              {aiSidebarOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+              {aiSidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
               AI Panel
+<<<<<<< Updated upstream
             </Button>
+=======
+            </button>
+
+            <TourHelpButton
+              tourId="project"
+              userId={userId}
+              onStart={tour.start}
+            />
+>>>>>>> Stashed changes
           </div>
         </nav>
 

@@ -434,70 +434,6 @@ function StatCounter({
     </div>
   );
 }
-
-/* ─── Tech marquee ────────────────────────────────────────────── */
-const techStack = [
-  "React Flow", "Liveblocks", "Gemini AI", "Trigger.dev", "Vercel Blob",
-  "PostgreSQL", "Clerk Auth", "Next.js 15", "TypeScript", "Zod", "Prisma ORM", "tRPC",
-];
-
-function TechMarquee() {
-  const t1 = useRef<HTMLDivElement>(null);
-  const t2 = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.to(t1.current, { x: "-50%", duration: 28, ease: "none", repeat: -1 });
-      gsap.to(t2.current, {
-        x: "0%",
-        duration: 32,
-        ease: "none",
-        repeat: -1,
-        startAt: { x: "-50%" },
-      });
-    });
-    return () => ctx.revert();
-  }, []);
-  const doubled = [...techStack, ...techStack];
-  return (
-    <div
-      className="relative overflow-hidden py-8 border-y border-white/4"
-      aria-hidden="true"
-    >
-      {(["left", "right"] as const).map((side) => (
-        <div
-          key={side}
-          className={`absolute ${side}-0 top-0 bottom-0 w-32 z-10 pointer-events-none`}
-          style={{
-            background: `linear-gradient(to ${side === "left" ? "right" : "left"}, #07070E 0%, transparent 100%)`,
-          }}
-        />
-      ))}
-      <div className="space-y-3">
-        <div ref={t1} className="flex whitespace-nowrap">
-          {doubled.map((item, i) => (
-            <span key={`t-${item}-${i}`} className="flex items-center gap-6 px-6">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/20">
-                {item}
-              </span>
-              <span className="w-1 h-1 rounded-full bg-white/10" />
-            </span>
-          ))}
-        </div>
-        <div ref={t2} className="flex whitespace-nowrap">
-          {doubled.map((item, i) => (
-            <span key={`b-${item}-${i}`} className="flex items-center gap-6 px-6">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/10">
-                {item}
-              </span>
-              <span className="w-1 h-1 rounded-full bg-white/5" />
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Main export ─────────────────────────────────────────────── */
 export default function FeaturesSection() {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -612,8 +548,7 @@ export default function FeaturesSection() {
         </div>
       </div>
 
-      {/* Marquee */}
-      <TechMarquee />
+
 
       {/* CTA */}
       <div className="relative max-w-6xl mx-auto px-6 md:px-10 py-20 text-center">

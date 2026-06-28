@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { GenerateButton } from '@/components/ui/generate-button'
 import { cn } from '@/lib/utils'
 import { canvasFlowSchema, type CanvasFlow } from '@/types/canvas'
 import {
@@ -616,7 +617,7 @@ function ArchitectTab({
           </motion.div>
         )}
 
-        <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-2">
           <Textarea
             ref={textareaRef}
             className="min-h-15 max-h-30 resize-none rounded-2xl border-zinc-800/70 bg-zinc-900/50 text-xs text-zinc-100 placeholder:text-zinc-600 focus-visible:border-indigo-500/50"
@@ -626,16 +627,15 @@ function ArchitectTab({
             placeholder="Ask Nexus AI to design a system..."
             value={prompt}
           />
-          <Button
-            aria-label="Send prompt"
-            className="h-9 w-9 shrink-0 cursor-pointer rounded-2xl bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-50"
-            disabled={!prompt.trim() || isComposerBusy}
-            onClick={onSubmit}
-            size="icon"
-            type="button"
-          >
-            {isComposerBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-          </Button>
+          <div className="flex justify-center">
+            <GenerateButton
+              hue={258}
+              isGenerating={isComposerBusy}
+              disabled={!prompt.trim() || isComposerBusy}
+              onClick={onSubmit}
+              aria-label="Generate architecture"
+            />
+          </div>
         </div>
       </div>
     </motion.div>
@@ -757,16 +757,16 @@ function SpecsTab({
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants}>
-        <Button
-          className="w-full cursor-pointer rounded-2xl bg-indigo-500 text-xs text-white hover:bg-indigo-400"
+      <motion.div variants={itemVariants} className="flex justify-center">
+        <GenerateButton
+          hue={258}
+          text="Generate Spec"
+          activeText="Generating..."
+          isGenerating={isSpecSubmitting || isSpecRunActive}
           disabled={isSpecSubmitting || isSpecRunActive}
           onClick={onGenerateSpec}
-          type="button"
-        >
-          {isSpecSubmitting || isSpecRunActive ? <LoaderCircle className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}
-          Generate Spec
-        </Button>
+          aria-label="Generate Spec"
+        />
       </motion.div>
 
       {specStatus && (

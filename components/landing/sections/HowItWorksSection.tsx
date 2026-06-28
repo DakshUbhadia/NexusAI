@@ -10,6 +10,7 @@ import {
 import { gsap } from "../../animations/gsapConfig";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import MagneticButton from "../../ui/MagneticButton";
+import { RadialGlowButton } from "@/components/ui/radial-glow-button";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -611,9 +612,9 @@ export default function HowItWorksSection() {
           From prompt to shipped <span className="gradient-text">in minutes</span>
         </h3>
         <div className="flex items-center gap-4 flex-wrap justify-center">
-          <MagneticButton href={workspaceHref} className="px-9 py-4 rounded-full text-sm font-bold btn-violet">
+          <RadialGlowButton onClick={() => { window.location.href = workspaceHref; }} className="text-sm font-bold">
             Open Workspace
-          </MagneticButton>
+          </RadialGlowButton>
           <MagneticButton href="#features" className="px-9 py-4 rounded-full text-sm font-bold btn-ghost">
             Explore Features
           </MagneticButton>

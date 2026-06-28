@@ -22,6 +22,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MaskedAvatars } from '@/components/ui/masked-avatars'
 import { cn } from '@/lib/utils'
 import type { EditorProject } from '@/lib/editor-projects'
 import type { CollaboratorProfile } from '@/types/collaborators'
@@ -657,7 +658,25 @@ function ProjectCard({ project, meta, isActive, onOpenProject, onRenameProject, 
 
           <div className="mt-2 flex items-center justify-between gap-3">
             <p className="truncate text-xs text-zinc-600">{meta.updatedLabel}</p>
-            <AvatarStack avatars={meta.avatars} countLabel={meta.countLabel} />
+            {meta.maskedAvatars.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <MaskedAvatars
+                  avatars={meta.maskedAvatars}
+                  size={28}
+                  border={3}
+                  column={18}
+                  movement={0.6}
+                  ringed={false}
+                  blurOnRest={false}
+                  className="scale-90"
+                />
+                {meta.countLabel && (
+                  <span className="text-[10px] font-medium tabular-nums text-zinc-600">
+                    {meta.countLabel}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -701,37 +720,7 @@ function ProjectBadge({ label }: Readonly<{ label: string }>) {
   )
 }
 
-// --- Avatar Stack ---
-
-function AvatarStack({ avatars, countLabel }: Readonly<{ avatars: string[]; countLabel: string }>) {
-  if (avatars.length === 0) return null
-
-  return (
-    <div className="group/stack flex items-center gap-1.5">
-      <div className="flex -space-x-1.5 transition-[gap] duration-300 group-hover/stack:-space-x-0.5">
-        {avatars.map((avatar, i) => (
-          <span
-            key={`${avatar}-${i}`}
-            aria-hidden="true"
-            className={cn(
-              'flex size-4.5 select-none items-center justify-center rounded-full text-[9px] font-bold ring-2 ring-zinc-950 shadow-sm',
-              i === 0 && 'bg-zinc-800 text-zinc-300 border border-zinc-700/50',
-              i === 1 && 'bg-indigo-950/80 text-indigo-300 border border-indigo-900/60',
-              i === 2 && 'bg-violet-950/80 text-violet-300 border border-violet-900/60'
-            )}
-          >
-            {avatar}
-          </span>
-        ))}
-      </div>
-      {countLabel && (
-        <span className="text-[10px] font-medium tabular-nums text-zinc-700 transition-colors group-hover/stack:text-zinc-400">
-          {countLabel}
-        </span>
-      )}
-    </div>
-  )
-}
+// (AvatarStack replaced by MaskedAvatars — see ProjectCard)
 
 // --- Empty State ---
 
@@ -793,22 +782,29 @@ export function SidebarFooter({ onCreateProject }: SidebarFooterProps) {
 
 // --- Data Helpers ---
 
-function getProjectMeta(project: EditorProject) {
-  const collaborators = project.collaborators ?? []
-  const displayed = collaborators.slice(0, 3)
-  const avatars = displayed.map(getInitials)
-  const overflow = Math.max(0, collaborators.length - 3)
-  const countLabel = overflow > 0 ? `+${overflow}` : ''
-  const updatedLabel = formatRelativeTime(project.updatedAt)
-  return { avatars, updatedLabel, countLabel }
+function getCollaboratorAvatarUrl(c: CollaboratorProfile): string {
+  if (c.avatarUrl) return c.avatarUrl
+  const displayName = c.displayName || c.email.split('@')[0] || '?'
+  // Generate a consistent placeholder avatar using ui-avatars
+  const encoded = encodeURIComponent(displayName)
+  return `https://ui-avatars.com/api/?name=${encoded}&background=1a1a30&color=a0a0c0&size=64&bold=true&format=png`
 }
 
-function getInitials(c: CollaboratorProfile): string {
-  const name = c.displayName || c.email.split('@')[0] || '?'
-  const parts = name.trim().split(/[\s._-]+/)
-  return parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : name.substring(0, 2).toUpperCase()
+function getCollaboratorName(c: CollaboratorProfile): string {
+  return c.displayName || c.email.split('@')[0] || 'User'
+}
+
+function getProjectMeta(project: EditorProject) {
+  const collaborators = project.collaborators ?? []
+  const displayed = collaborators.slice(0, 4)
+  const maskedAvatars = displayed.map((c) => ({
+    avatar: getCollaboratorAvatarUrl(c),
+    name: getCollaboratorName(c),
+  }))
+  const overflow = Math.max(0, collaborators.length - 4)
+  const countLabel = overflow > 0 ? `+${overflow}` : ''
+  const updatedLabel = formatRelativeTime(project.updatedAt)
+  return { maskedAvatars, updatedLabel, countLabel }
 }
 
 function formatRelativeTime(dateInput?: string): string {
