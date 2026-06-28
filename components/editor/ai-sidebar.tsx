@@ -130,6 +130,7 @@ type SpecContentDisplayProps = {
 type ArchitectTabProps = {
   readonly currentSenderName: string
   readonly messages: readonly ChatFeedMessage[]
+  readonly isMessagesLoading: boolean
   readonly isRunActive: boolean
   readonly sharedStatusText: string
   readonly prompt: string
@@ -143,6 +144,7 @@ type ArchitectTabProps = {
 
 type TeamTabProps = {
   readonly messages: readonly CollabChatMessage[]
+  readonly isMessagesLoading: boolean
   readonly currentSenderName: string
   readonly prompt: string
   readonly isComposerBusy: boolean
@@ -530,6 +532,7 @@ function SpecContentDisplay({ isLoading, error, content }: SpecContentDisplayPro
 function ArchitectTab({
   currentSenderName,
   messages,
+  isMessagesLoading,
   isRunActive,
   sharedStatusText,
   prompt,
@@ -562,7 +565,15 @@ function ArchitectTab({
       </div>
 
       <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-3 py-3" onWheel={handleSidebarWheel} style={{ WebkitOverflowScrolling: 'touch' }}>
-        {messages.length === 0 ? (
+        {isMessagesLoading ? (
+          <motion.div
+            variants={itemVariants}
+            className="flex h-full flex-col items-center justify-center gap-3 text-center"
+          >
+            <LoaderCircle className="size-5 animate-spin text-zinc-600" />
+            <p className="text-[11px] text-zinc-600">Loading conversation...</p>
+          </motion.div>
+        ) : messages.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="flex h-full flex-col items-center justify-center text-center"
@@ -644,6 +655,7 @@ function ArchitectTab({
 
 function TeamTab({
   messages,
+  isMessagesLoading,
   currentSenderName,
   prompt,
   isComposerBusy,
@@ -674,7 +686,15 @@ function TeamTab({
       </div>
 
       <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-3 py-3" onWheel={handleSidebarWheel} style={{ WebkitOverflowScrolling: 'touch' }}>
-        {messages.length === 0 ? (
+        {isMessagesLoading ? (
+          <motion.div
+            variants={itemVariants}
+            className="flex h-full flex-col items-center justify-center gap-3 text-center"
+          >
+            <LoaderCircle className="size-5 animate-spin text-zinc-600" />
+            <p className="text-[11px] text-zinc-600">Loading messages...</p>
+          </motion.div>
+        ) : messages.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="flex h-full flex-col items-center justify-center text-center"
@@ -824,6 +844,8 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
   const [activeRun, setActiveRun] = useState<ActiveRunState | null>(null)
   const [activeSpecRun, setActiveSpecRun] = useState<ActiveSpecRunState | null>(null)
 
+  const [feedsReady, setFeedsReady] = useState(false)
+
   const createFeed = useCreateFeed()
   const createFeedMessage = useCreateFeedMessage()
   const self = useSelf((current) => current)
@@ -831,11 +853,16 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
   const collaborationFeedId = useMemo(() => `${COLLAB_CHAT_FEED_ID}:${roomId}`, [roomId])
 
-  const { messages: statusMessages } = useFeedMessages(AI_STATUS_FEED_ID, {
+  const { messages: statusMessages } = useFeedMessages(feedsReady ? AI_STATUS_FEED_ID : 'wait-status', {
     limit: 1,
   })
-  const { messages: architectFeedMessages } = useFeedMessages(AI_CHAT_FEED_ID)
-  const { messages: teamFeedMessages } = useFeedMessages(collaborationFeedId)
+  const { messages: architectFeedMessages, isLoading: isArchitectFeedLoading, error: architectFeedError } = useFeedMessages(feedsReady ? AI_CHAT_FEED_ID : 'wait-ai')
+  const { messages: teamFeedMessages, isLoading: isTeamFeedLoading, error: teamFeedError } = useFeedMessages(feedsReady ? collaborationFeedId : 'wait-team')
+
+  // Treat a feed-not-found error as "done loading" (feed will be created by ensureFeedExists)
+  // Also force loading state while feeds are being initialized
+  const isArchitectMessagesLoading = !feedsReady || (isArchitectFeedLoading && !architectFeedError)
+  const isTeamMessagesLoading = !feedsReady || (isTeamFeedLoading && !teamFeedError)
 
   const latestFeedStatus = useMemo(() => {
     const latestMessage = statusMessages?.[0]
@@ -1020,8 +1047,13 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
       }
     }
 
-    void ensureFeedExists(AI_CHAT_FEED_ID, 'AI Chat')
-    void ensureFeedExists(collaborationFeedId, 'Team Chat')
+    async function initFeeds() {
+      await ensureFeedExists(AI_CHAT_FEED_ID, 'AI Chat')
+      await ensureFeedExists(collaborationFeedId, 'Team Chat')
+      if (!cancelled) setFeedsReady(true)
+    }
+
+    void initFeeds()
 
     return () => {
       cancelled = true
@@ -1291,6 +1323,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
         <motion.aside
           key="ai-sidebar"
           aria-label="AI Sidebar"
+          data-tour="ai-sidebar-panel"
           className="relative flex h-full shrink-0 flex-col overflow-hidden border-l border-zinc-800/50 bg-zinc-950 text-zinc-100 shadow-2xl"
           initial="hidden"
           animate="visible"
@@ -1340,9 +1373,10 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                 onValueChange={(value) => setActiveTab(value as SidebarTab)}
                 value={activeTab}
               >
-                <TabsList className="relative grid h-9 w-full shrink-0 grid-cols-3 rounded-full border border-zinc-800/40 bg-zinc-900 p-1">
+                <TabsList className="relative grid h-9 w-full shrink-0 grid-cols-3 rounded-full border border-zinc-800/40 bg-zinc-900 p-1" data-tour="ai-tabs-list">
                   <TabsTrigger
                     className="relative flex items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-400 transition-all duration-200 data-[state=active]:text-zinc-100 cursor-pointer"
+                    data-tour="ai-tab-architect"
                     value="architect"
                   >
                     {activeTab === 'architect' && (
@@ -1358,6 +1392,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
                   <TabsTrigger
                     className="relative flex items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-400 transition-all duration-200 data-[state=active]:text-zinc-100 cursor-pointer"
+                    data-tour="ai-tab-team"
                     value="team"
                   >
                     {activeTab === 'team' && (
@@ -1373,6 +1408,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
                   <TabsTrigger
                     className="relative flex items-center justify-center gap-1.5 rounded-full text-xs font-medium text-zinc-400 transition-all duration-200 data-[state=active]:text-zinc-100 cursor-pointer"
+                    data-tour="ai-tab-specs"
                     value="specs"
                   >
                     {activeTab === 'specs' && (
@@ -1392,6 +1428,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                     <ArchitectTab
                       currentSenderName={currentSenderName}
                       isComposerBusy={isArchitectComposerBusy}
+                      isMessagesLoading={isArchitectMessagesLoading}
                       isRunActive={isRunActive}
                       messages={architectMessages}
                       onPromptChange={handleArchitectPromptChange}
@@ -1408,6 +1445,7 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
                     <TeamTab
                       currentSenderName={currentSenderName}
                       isComposerBusy={isTeamComposerBusy}
+                      isMessagesLoading={isTeamMessagesLoading}
                       messages={teamMessages}
                       onPromptChange={handleChatPromptChange}
                       onPromptKeyDown={handleTeamPromptKeyDown}

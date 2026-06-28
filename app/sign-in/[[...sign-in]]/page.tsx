@@ -260,6 +260,30 @@ export default function SignInPage() {
     if (globalThis.window !== undefined) {
       window.history.pushState(null, '', window.location.href)
       const handlePopState = () => {
+        // 1. URL-based callback check (catches most OAuth return paths)
+        const isCallback =
+          window.location.pathname.includes('/sso-callback') ||
+          window.location.pathname.includes('/oauth-callback') ||
+          window.location.search.includes('__clerk')
+        if (isCallback) return
+
+        // 2. Cookie-based session check: Clerk sets __client_uat the moment
+        //    OAuth succeeds. If it's present, popstate fired because Clerk
+        //    is cleaning up OAuth history entries — not because the user
+        //    hit the back button. Let Clerk's own redirect to /editor run.
+        const hasClerkSession = document.cookie
+          .split(';')
+          .some(c => {
+            const trimmed = c.trim()
+            if (trimmed.startsWith('__session=')) return true
+            if (trimmed.startsWith('__client_uat=')) {
+              const val = trimmed.split('=')[1]
+              return val !== '0' && val !== ''
+            }
+            return false
+          })
+        if (hasClerkSession) return
+
         window.location.href = '/'
       }
       window.addEventListener('popstate', handlePopState)
@@ -512,6 +536,8 @@ export default function SignInPage() {
                   signUpUrl="/sign-up"
                   forceRedirectUrl="/editor"
                   fallbackRedirectUrl="/editor"
+                  signUpForceRedirectUrl="/editor"
+                  signUpFallbackRedirectUrl="/editor"
                   appearance={{
                     variables: {
                       borderRadius: "var(--radius-md)",

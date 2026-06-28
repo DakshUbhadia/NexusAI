@@ -21,13 +21,15 @@ function buildAccessFilter(identity: ClerkIdentity) {
     }
   }
 
+  const normalizedEmail = identity.primaryEmail.toLowerCase()
+
   return {
     OR: [
       { ownerId: identity.userId },
       {
         collaborators: {
           some: {
-            email: identity.primaryEmail,
+            email: normalizedEmail,
           },
         },
       },

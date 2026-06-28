@@ -1,3 +1,4 @@
+'use client'
 import React from 'react'
 import { Undo, Redo, Plus, Minus, Maximize2, Trash2 } from 'lucide-react'
 
@@ -16,7 +17,7 @@ type Props = Readonly<{
 export default function CanvasControls(props: Props) {
   const { onZoomIn, onZoomOut, onFitView, onUndo, onRedo, canUndo, canRedo, onDelete, canDelete } = props
   return (
-    <div className="flex items-center gap-2 rounded-full bg-(--bg-overlay) border border-(--border-default) px-2 py-1 shadow-(--shadow-sm)">
+    <div className="flex items-center gap-2 rounded-full bg-(--bg-overlay) border border-(--border-default) px-2 py-1 shadow-(--shadow-sm)" data-tour="canvas-controls">
         {/* Zoom group */}
         <div className="flex items-center gap-1">
           <button aria-label="Zoom out" type="button" onClick={onZoomOut} className="p-2 rounded hover:bg-(--bg-surface-elevated)">

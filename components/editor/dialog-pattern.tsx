@@ -1,3 +1,4 @@
+'use client'
 import React from 'react'
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
@@ -10,7 +11,6 @@ interface DialogPatternProps extends React.ComponentProps<'div'> {
 }
 
 export function DialogPattern(
-  // keep props typed as readonly to satisfy lint rules
   props: Readonly<DialogPatternProps>
 ) {
   const { className, children, ...propsRest } = props

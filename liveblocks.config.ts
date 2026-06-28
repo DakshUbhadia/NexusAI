@@ -13,6 +13,11 @@ type DesignAgentStatusEvent = {
   timestamp: string
 }
 
+type AccessRevokedEvent = {
+  type: 'access-revoked'
+  email: string
+}
+
 declare global {
   interface Liveblocks {
     Presence: {
@@ -33,7 +38,7 @@ declare global {
         color: string
       }
     }
-    RoomEvent: DesignAgentStatusEvent
+    RoomEvent: DesignAgentStatusEvent | AccessRevokedEvent
     FeedMetadata: {
       name?: string
     }

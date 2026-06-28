@@ -3,51 +3,62 @@
 import { useEffect, useRef } from "react";
 import { useClerk, useAuth } from "@clerk/nextjs";
 
-/**
- * ForceSignOut — intentional session terminator for auth pages.
- *
- * Design requirement: every visit to /sign-in or /sign-up must destroy any
- * active session so the user always authenticates manually. This is a
- * deliberate product decision, not a bug.
- *
- * Edge cases handled:
- * - Guard ref prevents double sign-out if the component re-renders before
- *   Clerk's async signOut() resolves.
- * - redirectUrl is set explicitly so Clerk lands back on /sign-in after the
- *   session is destroyed rather than triggering a blank page or loop.
- * - sessionStorage key is cleared so any in-memory session flags are removed
- *   even if signOut() itself fails.
- */
+function isActiveClerkCallback(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const { pathname, search } = new URL(window.location.href);
+
+  if (
+    pathname.includes("/sso-callback") ||
+    pathname.includes("/oauth-callback") ||
+    pathname.includes("/verify-email-address") ||
+    pathname.includes("/verify-phone-number") ||
+    pathname.includes("/factor-one") ||
+    pathname.includes("/factor-two") ||
+    pathname.includes("/continue") ||
+    pathname.includes("/reset-password")
+  ) {
+    return true;
+  }
+
+  if (
+    search.includes("__clerk_status") ||
+    search.includes("__clerk_created_session") ||
+    search.includes("rotating_token_nonce") ||
+    search.includes("clerk_ticket") ||
+    search.includes("__clerk_db_jwt")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export default function ForceSignOut() {
   const { signOut } = useClerk();
   const { isLoaded, isSignedIn } = useAuth();
   const hasSignedOut = useRef(false);
+  const wasInCallback = useRef(isActiveClerkCallback());
 
   useEffect(() => {
-    // Wait until Clerk has finished loading session state.
+    if (isActiveClerkCallback()) {
+      wasInCallback.current = true;
+    }
+  });
+
+  useEffect(() => {
     if (!isLoaded) return;
 
-    // Clear the in-memory session flag unconditionally on every auth-page
-    // visit so stale flags never let client-side guards pass.
+    if (wasInCallback.current || isActiveClerkCallback()) return;
+
     sessionStorage.removeItem("nexus_session_active");
 
-    // Only attempt sign-out when there is an active session and we have not
-    // already fired sign-out in this render cycle (guard against double calls
-    // if isSignedIn flickers or the effect re-runs before completion).
     if (isSignedIn && !hasSignedOut.current) {
       hasSignedOut.current = true;
 
       signOut({
-        // Redirect back to /sign-in after the session is cleared so the user
-        // sees the login form rather than a blank page or an unintended route.
         redirectUrl: "/sign-in",
-      }).catch(() => {
-        // If sign-out fails for any reason (network, Clerk outage), the page
-        // stays on /sign-in. The user still sees the sign-in form. The worst
-        // outcome is a stale cookie that the server's auth.protect() will
-        // reject on the next protected-route request — so this is safe to
-        // swallow here.
-      });
+      }).catch(() => {});
     }
   }, [isLoaded, isSignedIn, signOut]);
 
