@@ -515,6 +515,11 @@ function FlowCanvasInner({
           cache: 'no-store',
         })
 
+        if (response.status === 404) {
+          // Project has no saved canvas yet (new project) — this is expected
+          return
+        }
+
         if (!response.ok) {
           throw new Error(`Canvas load failed with ${response.status}`)
         }

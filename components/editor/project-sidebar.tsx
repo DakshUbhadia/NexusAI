@@ -23,6 +23,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MaskedAvatars } from '@/components/ui/masked-avatars'
+
 import { cn } from '@/lib/utils'
 import type { EditorProject } from '@/lib/editor-projects'
 import type { CollaboratorProfile } from '@/types/collaborators'
@@ -404,7 +405,7 @@ function SidebarTabs(props: SidebarTabsProps) {
         </TabsList>
 
         <TabsContent
-          className="sidebar-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y px-0.5 pt-4 pb-2 outline-none"
+          className="sidebar-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y px-0.5 pt-4 pb-2 outline-none"
           value="my-projects"
           onWheel={handleSidebarWheel}
           style={{ WebkitOverflowScrolling: 'touch' }}
@@ -425,7 +426,7 @@ function SidebarTabs(props: SidebarTabsProps) {
         </TabsContent>
 
         <TabsContent
-          className="sidebar-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y px-0.5 pt-4 pb-2 outline-none"
+          className="sidebar-scrollbar mt-0 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y px-0.5 pt-4 pb-2 outline-none"
           value="shared"
           onWheel={handleSidebarWheel}
           style={{ WebkitOverflowScrolling: 'touch' }}
@@ -774,7 +775,7 @@ export function SidebarFooter({ onCreateProject }: SidebarFooterProps) {
           aria-hidden="true"
           className="absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/10 to-transparent transition-transform duration-500 group-hover:translate-x-full"
         />
-        <Plus className="relative size-3.5 transition-transform duration-200 group-hover:rotate-90" aria-hidden="true" />
+        <Plus className="relative mr-2 size-3.5 transition-transform duration-200 group-hover:rotate-90" aria-hidden="true" />
         <span className="relative">New Project</span>
       </motion.button>
 

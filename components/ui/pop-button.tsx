@@ -7,15 +7,12 @@ export function PopButton({ className, children = "Learn More", ...props }: PopB
   return (
     <button
       className={cn(
-        "group relative inline-flex items-center justify-center font-semibold uppercase text-[#382b22] dark:text-[#382b22]",
-        "px-8 py-5 rounded-xl bg-[#fff0f0] border-2 border-[#b18597]",
+        "group relative inline-flex items-center justify-center font-semibold text-white",
+        "px-6 py-2.5 rounded-xl bg-linear-to-br from-indigo-500 to-violet-600 border-2 border-indigo-950",
         "transition-all duration-150 ease-[cubic-bezier(0,0,0.58,1)]",
-        "shadow-[0_12px_0_-2px_#f9c4d2,0_12px_0_0_#b18597,0_22px_0_0_#ffe3e2]",
-        "dark:shadow-[0_12px_0_-2px_#f9c4d2,0_12px_0_0_#b18597,0_22px_15px_-5px_rgba(0,0,0,0.3)]",
-        "hover:bg-[#ffe9e9] hover:translate-y-1 hover:shadow-[0_8px_0_-2px_#f9c4d2,0_8px_0_0_#b18597,0_16px_0_0_#ffe3e2]",
-        "dark:hover:shadow-[0_8px_0_-2px_#f9c4d2,0_8px_0_0_#b18597,0_16px_10px_-5px_rgba(0,0,0,0.3)]",
-        "active:bg-[#ffe9e9] active:translate-y-3 active:shadow-[0_0px_0_-2px_#f9c4d2,0_0px_0_0_#b18597,0_0px_0_0_#ffe3e2]",
-        "dark:active:shadow-[0_0px_0_-2px_#f9c4d2,0_0px_0_0_#b18597,0_0px_0_0_rgba(0,0,0,0)]",
+        "shadow-[0_4px_0_-1px_rgba(255,255,255,0.2),0_4px_0_0_#1e1b4b,0_8px_10px_-2px_rgba(0,0,0,0.3)]",
+        "hover:from-indigo-400 hover:to-violet-500 hover:translate-y-[2px] hover:shadow-[0_2px_0_-1px_rgba(255,255,255,0.2),0_2px_0_0_#1e1b4b,0_4px_8px_-2px_rgba(0,0,0,0.3)]",
+        "active:from-indigo-400 active:to-violet-500 active:translate-y-[4px] active:shadow-[0_0px_0_-1px_rgba(255,255,255,0.2),0_0px_0_0_#1e1b4b,0_0px_0_0_rgba(0,0,0,0)]",
         className
       )}
       {...props}

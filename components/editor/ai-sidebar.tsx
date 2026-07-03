@@ -130,8 +130,8 @@ type SpecContentDisplayProps = {
 type ArchitectTabProps = {
   readonly currentSenderName: string
   readonly messages: readonly ChatFeedMessage[]
-  readonly isMessagesLoading: boolean
   readonly isRunActive: boolean
+  readonly isMessagesLoading: boolean
   readonly sharedStatusText: string
   readonly prompt: string
   readonly isComposerBusy: boolean
@@ -144,8 +144,8 @@ type ArchitectTabProps = {
 
 type TeamTabProps = {
   readonly messages: readonly CollabChatMessage[]
-  readonly isMessagesLoading: boolean
   readonly currentSenderName: string
+  readonly isMessagesLoading: boolean
   readonly prompt: string
   readonly isComposerBusy: boolean
   readonly textareaRef: RefObject<HTMLTextAreaElement | null>
@@ -532,8 +532,8 @@ function SpecContentDisplay({ isLoading, error, content }: SpecContentDisplayPro
 function ArchitectTab({
   currentSenderName,
   messages,
-  isMessagesLoading,
   isRunActive,
+  isMessagesLoading,
   sharedStatusText,
   prompt,
   isComposerBusy,
@@ -655,8 +655,8 @@ function ArchitectTab({
 
 function TeamTab({
   messages,
-  isMessagesLoading,
   currentSenderName,
+  isMessagesLoading,
   prompt,
   isComposerBusy,
   textareaRef,
@@ -1036,13 +1036,32 @@ export function AiSidebar({ projectId, projectSpecs, roomId, open, onOpenChange 
 
   useEffect(() => {
     let cancelled = false
+    const MAX_ATTEMPTS = 5
+    const BASE_DELAY_MS = 800
 
     async function ensureFeedExists(feedId: string, name: string): Promise<void> {
-      try {
-        await createFeed(feedId, { metadata: { name } })
-      } catch (error) {
-        if (!isFeedAlreadyExistsError(error) && !cancelled) {
-          console.warn(`Failed to create ${name}.`, error)
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        if (cancelled) return
+
+        try {
+          await createFeed(feedId, { metadata: { name } })
+          return // success
+        } catch (error) {
+          if (isFeedAlreadyExistsError(error)) return // already exists — done
+
+          const isLastAttempt = attempt === MAX_ATTEMPTS - 1
+          if (isLastAttempt) {
+            if (!cancelled) console.warn(`Failed to create ${name} after ${MAX_ATTEMPTS} attempts.`, error)
+            return
+          }
+
+          // Exponential backoff: 800ms, 1.6s, 3.2s, 6.4s
+          const delay = BASE_DELAY_MS * Math.pow(2, attempt)
+          await new Promise<void>((resolve) => {
+            const timer = globalThis.setTimeout(() => resolve(), delay)
+            // Clean up timer if cancelled during wait
+            void Promise.resolve().then(() => { if (cancelled) globalThis.clearTimeout(timer) })
+          })
         }
       }
     }

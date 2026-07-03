@@ -102,21 +102,30 @@ async function requireProjectAccess(projectId: string): Promise<Response | null>
   const identity = await getCurrentClerkIdentity()
 
   if (!identity) {
+    console.warn('[canvas] Unauthenticated request for project', projectId)
     return errorResponse('Authentication required.', 'unauthorized', 401)
   }
 
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { id: true },
-  })
+  let project: { id: string } | null
+  try {
+    project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true },
+    })
+  } catch (error) {
+    console.error('[canvas] DB error looking up project', projectId, error)
+    return errorResponse('Database error.', 'db_error', 500)
+  }
 
   if (!project) {
+    console.warn('[canvas] Project not found in DB:', projectId, 'userId:', identity.userId)
     return errorResponse('Project not found.', 'not_found', 404)
   }
 
   const hasAccess = await hasProjectAccess(identity, projectId)
 
   if (!hasAccess) {
+    console.warn('[canvas] Access denied for project', projectId, 'userId:', identity.userId)
     return errorResponse('Access denied.', 'forbidden', 403)
   }
 

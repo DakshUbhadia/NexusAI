@@ -147,13 +147,13 @@ export function GenerateButton({
           position: relative;
           display: flex;
           align-items: center;
-          min-width: 6.4em;
+          justify-content: center;
         }
         
         .gen-txt-1,
         .gen-txt-2 {
           position: absolute;
-          word-spacing: -1em;
+          white-space: nowrap;
         }
         
         .gen-txt-1 {
@@ -282,6 +282,9 @@ export function GenerateButton({
         </svg>
 
         <div className="gen-txt-wrapper">
+          <div style={{ visibility: "hidden", whiteSpace: "nowrap", pointerEvents: "none" }}>
+            {text.length > activeText.length ? text : activeText}
+          </div>
           <div className="gen-txt-1">
             {text.split("").map((letter, i) => (
               <span key={`t1-${i}`} className="gen-btn-letter" style={{ animationDelay: `${i * 0.08}s` }}>
