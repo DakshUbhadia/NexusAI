@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import type { TourId, TourStep } from '@/types/onboarding'
 import { markTourSeen } from '@/lib/onboarding/storage'
@@ -39,6 +39,10 @@ type UseOnboardingTourReturn = {
 
 export function useOnboardingTour(userId: string | null): UseOnboardingTourReturn {
   const [state, setState] = useState<TourState>({ status: 'idle' })
+  // Keep a ref to userId so we can read the latest value inside setState updaters
+  // without needing to add it as a dep everywhere.
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
 
   const steps = useMemo<TourStep[]>(() => {
     if (state.status !== 'active') return []
@@ -51,6 +55,10 @@ export function useOnboardingTour(userId: string | null): UseOnboardingTourRetur
   }, [state, steps])
 
   const start = useCallback((tourId: TourId) => {
+    // Mark as seen immediately so that if the user closes the tab or navigates
+    // away before finishing/skipping, the tour won't re-appear on the next login.
+    const uid = userIdRef.current
+    if (uid) markTourSeen(tourId, uid)
     setState({ status: 'active', tourId, stepIndex: 0 })
   }, [])
 
@@ -60,12 +68,13 @@ export function useOnboardingTour(userId: string | null): UseOnboardingTourRetur
       const tourSteps = getStepsForTour(prev.tourId)
       const nextIndex = prev.stepIndex + 1
       if (nextIndex >= tourSteps.length) {
-        if (userId) markTourSeen(prev.tourId, userId)
+        // Tour already marked seen in start(); this is a belt-and-suspenders call.
+        if (userIdRef.current) markTourSeen(prev.tourId, userIdRef.current)
         return { status: 'idle' }
       }
       return { ...prev, stepIndex: nextIndex }
     })
-  }, [userId])
+  }, [])
 
   const back = useCallback(() => {
     setState((prev) => {
@@ -78,18 +87,20 @@ export function useOnboardingTour(userId: string | null): UseOnboardingTourRetur
   const skip = useCallback(() => {
     setState((prev) => {
       if (prev.status !== 'active') return prev
-      if (userId) markTourSeen(prev.tourId, userId)
+      // Tour already marked seen in start(); this is a belt-and-suspenders call.
+      if (userIdRef.current) markTourSeen(prev.tourId, userIdRef.current)
       return { status: 'idle' }
     })
-  }, [userId])
+  }, [])
 
   const finish = useCallback(() => {
     setState((prev) => {
       if (prev.status !== 'active') return prev
-      if (userId) markTourSeen(prev.tourId, userId)
+      // Tour already marked seen in start(); this is a belt-and-suspenders call.
+      if (userIdRef.current) markTourSeen(prev.tourId, userIdRef.current)
       return { status: 'idle' }
     })
-  }, [userId])
+  }, [])
 
   return {
     isActive: state.status === 'active',
