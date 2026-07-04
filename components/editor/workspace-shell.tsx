@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
   AlertCircle,
@@ -15,6 +15,7 @@ import {
   Share2,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 
 import {
   CreateProjectDialog,
@@ -27,11 +28,15 @@ import { ProjectSidebar } from '@/components/editor/project-sidebar'
 import { LiveblocksRoomProvider } from '@/components/editor/providers/liveblocks-room-provider'
 import { ShareDialog } from '@/components/editor/share-dialog'
 import { StarterTemplatesModal } from '@/components/editor/starter-templates-modal'
+import { TourOverlay } from '@/components/editor/onboarding/tour-overlay'
+import { TourHelpButton } from '@/components/editor/onboarding/tour-help-button'
 import { Button } from '@/components/ui/button'
 import { CreepyButton } from '@/components/ui/creepy-button'
 import type { EditorProjectLists } from '@/lib/editor-projects'
+import { hasSeenTour, markTourSeen } from '@/lib/onboarding/storage'
 
 import { useProjectActions } from '@/hooks/useProjectActions'
+import { useOnboardingTour } from '@/hooks/useOnboardingTour'
 import type { CanvasSaveStatus } from '@/hooks/useCanvasAutosave'
 import type { CanvasTemplate, CanvasTemplateImportRequest } from '@/components/editor/starter-templates'
 
@@ -73,6 +78,8 @@ function getSaveButtonLabel(status: CanvasSaveStatus, errorMessage: string | nul
 export function WorkspaceShell(props: WorkspaceShellProps) {
   const { currentProjectId, currentRoomId, projectName, ownedProjects, projectSpecs, sharedProjects } = props
   const router = useRouter()
+  const { user } = useUser()
+  const userId = user?.id ?? null
   const projectActions = useProjectActions({ activeProjectId: currentProjectId })
   const [projectSidebarOpen, setProjectSidebarOpen] = useState(false)
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
@@ -83,6 +90,43 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [templateImportRequest, setTemplateImportRequest] =
     useState<CanvasTemplateImportRequest | null>(null)
+
+  // ─── Onboarding tour ──────────────────────────────────────────────────
+  const tour = useOnboardingTour(userId)
+
+  // Auto-start the project tour the first time a user opens a room.
+  // We deliberately skip it if they already saw it (marked in localStorage).
+  useEffect(() => {
+    if (!userId) return
+    if (hasSeenTour('project', userId)) return
+
+    // Delay so the canvas and sidebars have painted before the overlay appears.
+    const timer = setTimeout(() => {
+      tour.start('project')
+    }, 800)
+
+    return () => clearTimeout(timer)
+    // Only fire once per userId — the tour itself handles advancing/finishing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  // Also mark the home tour as seen when a user lands in a project room,
+  // so they don't get the home tour redundantly afterwards.
+  useEffect(() => {
+    if (!userId) return
+    markTourSeen('home', userId)
+  }, [userId])
+
+  // Actions the tour can call to open/close sidebars at specific steps.
+  const tourActions = useMemo<Record<string, () => void>>(
+    () => ({
+      'open-project-sidebar': () => setProjectSidebarOpen(true),
+      'close-project-sidebar': () => setProjectSidebarOpen(false),
+      'open-ai-sidebar': () => setAiSidebarOpen(true),
+      'close-ai-sidebar': () => setAiSidebarOpen(false),
+    }),
+    [],
+  )
 
   const selectedOwnedProject = findOwnedProject(
     projectActions.dialogState.projectId,
@@ -190,6 +234,13 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
               {aiSidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
               AI Panel
             </button>
+
+            {/* Help / replay tour */}
+            <TourHelpButton
+              tourId="project"
+              userId={userId}
+              onStart={tour.start}
+            />
           </div>
         </nav>
 
@@ -290,6 +341,18 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
         onImport={handleTemplateImport}
         onOpenChange={setTemplatesOpen}
         open={templatesOpen}
+      />
+
+      {/* Project-room onboarding tour overlay */}
+      <TourOverlay
+        step={tour.currentStep}
+        stepIndex={tour.stepIndex}
+        totalSteps={tour.totalSteps}
+        actions={tourActions}
+        onNext={tour.next}
+        onBack={tour.back}
+        onSkip={tour.skip}
+        onFinish={tour.finish}
       />
     </>
   )
