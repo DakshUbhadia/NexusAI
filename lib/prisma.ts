@@ -47,8 +47,9 @@ const connectionString = normalizeConnectionString(rawDbUrl)
 const instantiate = (): PrismaClient => {
   const adapter = new PrismaPg({
     connectionString,
-    // One connection per process — the server-side pooler handles multiplexing.
-    max: 1,
+    // Match the connection pool size to the 200 VUs we are stress testing
+    // to ensure no queuing occurs on the Node.js side.
+    max: 500,
     // Never let the client-side pool close idle sockets; the pooler will
     // signal EOF when it wants to reclaim a backend, and the retry logic in
     // editor-projects.ts recovers from that transparently.

@@ -25,7 +25,18 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   if (isProtectedRoute(req)) {
-    await auth.protect();
+    // LOAD_TEST_MODE: bypass Clerk JWT verification for local load testing only.
+    // This guard is never active in production because LOAD_TEST_MODE is never
+    // set in production environment variables.
+    const isMockRequest =
+      process.env.LOAD_TEST_MODE === 'true' &&
+      req.headers.get('x-mock-user-id') !== null
+
+    console.log(`proxy.ts: isMockRequest=${isMockRequest} (LOAD_TEST_MODE=${process.env.LOAD_TEST_MODE}, x-mock-user-id=${req.headers.get('x-mock-user-id')})`)
+
+    if (!isMockRequest) {
+      await auth.protect()
+    }
   }
 
   return NextResponse.next();

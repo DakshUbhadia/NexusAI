@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { currentUser } from '@clerk/nextjs/server'
+import { headers } from 'next/headers'
 
 import prisma from '@/lib/prisma'
 
@@ -37,7 +38,20 @@ function buildAccessFilter(identity: ClerkIdentity) {
   }
 }
 
+// Returns a mock identity from the X-Mock-User-Id request header when
+// LOAD_TEST_MODE=true. Never called in production — the env var is never set.
+async function getMockIdentityFromHeader(): Promise<ClerkIdentity | null> {
+  const headerStore = await headers()
+  const mockUserId = headerStore.get('x-mock-user-id')
+  if (!mockUserId) return null
+  return { userId: mockUserId, primaryEmail: null }
+}
+
 export async function getCurrentClerkIdentity(): Promise<ClerkIdentity | null> {
+  if (process.env.LOAD_TEST_MODE === 'true') {
+    return getMockIdentityFromHeader()
+  }
+
   const user = await currentUser()
 
   if (!user?.id) {

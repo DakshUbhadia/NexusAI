@@ -29,7 +29,7 @@ run_tour.js
 Questions.md
 # testing
 /coverage
-
+# k6-tests
 # next.js
 /.next/
 /out/

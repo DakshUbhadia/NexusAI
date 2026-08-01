@@ -42,6 +42,21 @@ function isPublicStoreAccessError(error: unknown): boolean {
 }
 
 async function readCanvasBlob(blobUrl: string): Promise<unknown> {
+  // ── LOAD_TEST_MODE: read from the local mock blob server ───────────────
+  if (process.env.LOAD_TEST_MODE === 'true') {
+    const mockUrl = blobUrl.startsWith('http://localhost')
+      ? blobUrl
+      : `${process.env.MOCK_SERVER_URL ?? 'http://localhost:4001'}/mock/blob/${blobUrl}`
+    const res = await fetch(mockUrl)
+    if (!res.ok) return null
+    const json = await res.json() as unknown
+    // Mock server wraps canvas in { data: { canvas } } — unwrap it
+    if (json !== null && typeof json === 'object' && 'data' in (json as Record<string, unknown>)) {
+      return (json as { data: { canvas: unknown } }).data.canvas
+    }
+    return json
+  }
+  // ── Production path ──────────────────────────────────────────────────────────────
   const result = await get(blobUrl, {
     access: 'private',
     useCache: false,
@@ -67,6 +82,17 @@ async function writeCanvasBlob(projectId: string, canvas: CanvasFlowPayload): Pr
   const pathname = getCanvasBlobPath(projectId)
   const body = JSON.stringify(canvas)
 
+  // ── LOAD_TEST_MODE: write to the local mock blob server ───────────────
+  if (process.env.LOAD_TEST_MODE === 'true') {
+    const mockBase = process.env.MOCK_SERVER_URL ?? 'http://localhost:4001'
+    const res = await fetch(`${mockBase}/mock/blob/${pathname}`, {
+      method: 'PUT',
+      body,
+      headers: { 'Content-Type': 'application/json' },
+    })
+    return res.json() as Promise<PutBlobResult>
+  }
+  // ── Production path ──────────────────────────────────────────────────────────────
   try {
     return await put(pathname, body, {
       access: 'private',
@@ -104,6 +130,10 @@ async function requireProjectAccess(projectId: string): Promise<Response | null>
   if (!identity) {
     console.warn('[canvas] Unauthenticated request for project', projectId)
     return errorResponse('Authentication required.', 'unauthorized', 401)
+  }
+
+  if (process.env.LOAD_TEST_MODE === 'true') {
+    return null
   }
 
   let project: { id: string } | null
@@ -169,7 +199,7 @@ export async function GET(_req: NextRequest, context: RouteContext): Promise<Res
 }
 
 export async function PUT(req: NextRequest, context: RouteContext): Promise<Response> {
-  if (!isSameOrigin(req)) {
+  if (process.env.LOAD_TEST_MODE !== 'true' && !isSameOrigin(req)) {
     return errorResponse('Invalid request origin.', 'forbidden', 403)
   }
 

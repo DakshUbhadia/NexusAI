@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { currentUser } from '@clerk/nextjs/server'
+import { headers } from 'next/headers'
 
 import { ensureRoomAccess, getPresenceColor, getLiveblocksClient } from '@/lib/liveblocks'
 import { hasProjectAccess } from '@/lib/project-access'
@@ -42,6 +43,32 @@ function buildDisplayName(user: NonNullable<Awaited<ReturnType<typeof currentUse
 }
 
 export async function POST(req: Request): Promise<Response> {
+  // ── LOAD_TEST_MODE: bypass Clerk and Liveblocks APIs ──────────────────────
+  if (process.env.LOAD_TEST_MODE === 'true') {
+    const headerStore = await headers()
+    const mockUserId = headerStore.get('x-mock-user-id')
+
+    if (!mockUserId) {
+      return errorResponse('Mock user ID header missing.', 'unauthorized', 401)
+    }
+
+    const payload = await req.json().catch(() => null)
+    const parsed = roomSchema.safeParse(payload)
+    if (!parsed.success) {
+      return errorResponse('Room ID is required.', 'bad_request', 400)
+    }
+
+    // Delegate to the local mock server — instant, no rate limits
+    const mockUrl = `${process.env.MOCK_SERVER_URL ?? 'http://localhost:4001'}/mock/liveblocks/identify`
+    const mockRes = await fetch(mockUrl, { method: 'POST' })
+    const mockBody = await mockRes.text()
+    return new Response(mockBody, {
+      status: mockRes.status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const user = await currentUser()
 
   if (!user) {
