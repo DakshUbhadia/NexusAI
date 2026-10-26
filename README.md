@@ -115,6 +115,73 @@ nexus-ai/
 | **GET / POST** | `/api/liveblocks-auth` | Issues a Liveblocks room token after access verification. |
 | **GET / POST** | `/api/trigger` | Trigger.dev webhook handler for background task events. |
 
+## Testing
+
+### Recorded Unit Test Results
+
+An earlier test run reported **9 passing test suites** and **123 passing tests**. The coverage report showed 100% statement, branch, function, and line coverage for the files included in that report: `lib/`, `lib/onboarding/`, and `types/`.
+
+These figures describe the files included in the coverage run, not the entire application. The current `package.json` does not define a test script, and this checkout does not include the test configuration or test files needed to reproduce that run.
+
+### Load Testing
+
+The k6 scenarios are in `k6-tests/`. `07_mock_load.js` exercises a full API user journey: list projects, load a canvas, request room auth, and save the canvas. It uses the real Next.js routes and PostgreSQL queries, while Clerk/Liveblocks identity and Vercel Blob operations are mocked for local testing. This measures the app and database path, not capacity of those external services.
+
+### Recorded k6 Run
+
+One local run reached 200 VUs and completed 13,898 journeys (55,592 HTTP requests) over 7m01s:
+
+| Metric | Result |
+| --- | ---: |
+| Peak virtual users | 200 |
+| HTTP requests | 55,592 |
+| Throughput | 131.87 requests/second |
+| Failed HTTP requests | 0 (0.00%) |
+| Completed journeys | 13,898 |
+| Project list p95 | 868 ms |
+| Room auth p95 | 735 ms |
+| Canvas read p95 | 1.16 s |
+| Canvas write p95 | 1.10 s |
+
+All HTTP checks passed in that run. The four endpoint p95 values exceeded the script's configured latency thresholds (500 ms, 300 ms, 800 ms, and 1,000 ms respectively), so k6 reported a threshold failure even though the requests succeeded. These are observed local-test results, not a production capacity guarantee. The recorded run used an earlier load profile; the current script defaults to a 2-minute ramp to 200 VUs, a 5-minute hold, and a 1-minute ramp down.
+
+### Run the 200-VU Scenario
+
+Create `.env.load-test` in the project root with a valid `DATABASE_URL` and these settings:
+
+```env
+LOAD_TEST_MODE=true
+MOCK_SERVER_URL=http://localhost:4001
+DATABASE_URL=your_postgres_connection_string
+```
+
+Install dependencies, then open separate terminals in the project root:
+
+```bash
+npm ci
+```
+
+Start the mock integrations server:
+
+```bash
+node k6-tests/mock-server.js
+```
+
+Build and start Next.js with the load-test environment:
+
+```bash
+npx dotenv -e .env.load-test -- npm run build
+npx dotenv -e .env.load-test -- npm run start
+```
+
+After the build succeeds and the app is running, run k6 from another terminal. Replace `your-project-id` with an existing project ID from `/editor/<project-id>`:
+
+```bash
+k6 run -e MAX_VUS=200 -e RAMP_DURATION=2m -e HOLD_DURATION=5m -e PROJECT_ID=your-project-id --summary-export=results-200vu.json k6-tests/07_mock_load.js
+```
+
+The default profile lasts about 8 minutes: 2 minutes ramping to 200 VUs, 5 minutes at 200 VUs, then 1 minute ramping down. The project must exist because the journey reads and updates its canvas. A threshold failure means one or more configured metrics missed their target; review the checks and latency thresholds separately from HTTP failure rate.
+
 ## Getting Started
 
 ### Prerequisites
