@@ -59,3 +59,6 @@ next-env.d.ts
 
 .early.coverage
 /app/generated/prisma
+
+# clerk configuration (can include secrets)
+/.clerk/

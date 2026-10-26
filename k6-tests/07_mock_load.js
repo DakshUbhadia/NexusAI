@@ -32,6 +32,9 @@ import { Trend, Rate, Counter } from 'k6/metrics'
 const BASE_URL   = __ENV.BASE_URL    || 'http://localhost:3000'
 const PROJECT_ID = __ENV.PROJECT_ID  || 'cmpm7s6ne0001w8u8q7oumjgm'
 const MOCK_USER  = __ENV.MOCK_USER   || 'user_3FObPl3TuTVHOwSQBAih6h3BFcz'
+const MAX_VUS = Number(__ENV.MAX_VUS || 200)
+const RAMP_DURATION = __ENV.RAMP_DURATION || '2m'
+const HOLD_DURATION = __ENV.HOLD_DURATION || '5m'
 
 // ─── Custom metrics ───────────────────────────────────────────────────────────
 const listProjectsLatency   = new Trend('list_projects_ms',   true)
@@ -52,13 +55,23 @@ function headers(extraHeaders = {}) {
   }
 }
 
+// Log only a few first-iteration failures to reveal status/body without
+// flooding the terminal during a high-load run.
+function logFailure(step, res) {
+  if (__VU <= 3 && __ITER === 0) {
+    const detail = res.body ? String(res.body).substring(0, 300) : res.error || 'empty response body'
+    console.error(`[${step}] VU${__VU} status=${res.status}: ${detail}`)
+  }
+}
+
 // ─── Reusable canvas payload (matches Zod schema exactly) ────────────────────
 function makeCanvasPayload(vu) {
+  const nodeId = `mock-node-vu${vu}-${Date.now()}`
   return JSON.stringify({
     canvas: {
       nodes: [
         {
-          id: `mock-node-vu${vu}-${Date.now()}`,
+          id: nodeId,
           type: 'canvasNode',
           position: { x: vu * 20, y: 100 },
           data: {
@@ -83,7 +96,7 @@ function makeCanvasPayload(vu) {
       edges: [
         {
           id: `mock-edge-vu${vu}`,
-          source: `mock-node-vu${vu}-${Date.now()}`,
+          source: nodeId,
           target: `mock-node-db-vu${vu}`,
           type: 'canvasEdge',
           animated: false,
@@ -98,12 +111,9 @@ function makeCanvasPayload(vu) {
 // ─── Load profile ─────────────────────────────────────────────────────────────
 export const options = {
   stages: [
-    { duration: '60s', target: 50 },
-    { duration: '120s', target: 100 },
-    { duration: '120s', target: 200 },
-    { duration: '120s', target: 500 },
-    { duration: '60s', target: 250 },
-    { duration: '60s', target: 0  },
+    { duration: RAMP_DURATION, target: MAX_VUS },
+    { duration: HOLD_DURATION, target: MAX_VUS },
+    { duration: '1m', target: 0 },
   ],
   thresholds: {
     // The only real bottleneck now is Prisma — not third-party rate limits
@@ -133,6 +143,7 @@ export default function () {
       },
     })
     errorRate.add(!ok)
+    if (!ok) logFailure('list-projects', res)
   })
 
   sleep(Math.random() * 0.5 + 0.2) // 0.2–0.7s think time
@@ -153,6 +164,7 @@ export default function () {
       },
     })
     errorRate.add(!ok)
+    if (!ok) logFailure('canvas-get', res)
   })
 
   sleep(Math.random() * 0.5 + 0.2)
@@ -174,6 +186,7 @@ export default function () {
       },
     })
     errorRate.add(!ok)
+    if (!ok) logFailure('liveblocks-auth', res)
   })
 
   sleep(Math.random() * 0.5 + 0.2)
@@ -196,8 +209,7 @@ export default function () {
     if (ok) {
       successfulSaves.add(1)
     } else {
-      const body = res.body ? res.body.substring(0, 300) : `timeout/network error: ${res.error}`
-      console.error(`❌ PUT canvas VU${__VU} → ${res.status}: ${body}`)
+      logFailure('canvas-put', res)
     }
   })
 
