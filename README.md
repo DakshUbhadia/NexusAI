@@ -12,39 +12,633 @@
 
 Users can describe an architectural system in plain English, empowering a Google Gemini-powered AI agent to autonomously map that description onto a shared React Flow canvas. Beyond visual design, a secondary background AI agent converts the finalized canvas graph into a production-grade, multi-page Markdown technical specification. This acts as a comprehensive execution guide—detailing the system blueprint, tech stack, roadmap, and task breakdowns granular enough for human engineers and AI coding assistants to execute end-to-end.
 
-## Architecture Diagrams
+## Architecture and UML Diagrams
 
-Of the supplied UML files, these two best match Nexus AI at the system and component-boundary level. They show the implemented Next.js UI and API layers, Liveblocks collaboration, Trigger.dev workers, Gemini generation, Prisma/PostgreSQL persistence, and Vercel Blob storage.
-
-> **Implementation note:** Access control in the current code is intentionally simpler than some labels inside these architecture views: a project member is either the owner or an email-based collaborator. `Project.id` is also used as the Liveblocks room ID. The source code and Prisma schema are authoritative for those details.
+These diagrams are written in Mermaid so they render directly in compatible Markdown viewers, including GitHub. They describe the current implementation: projects use their database ID as the Liveblocks room ID, access is either owner or email-based collaborator, and every authorized project member can edit the shared canvas and invoke AI workflows.
 
 ### High-Level Design
 
-The high-level design shows how browser features, server-side routes and services, asynchronous AI workers, persistence, and external cloud services interact.
+```mermaid
+flowchart TB
+    Guest[Guest] --> Landing[Landing page]
+    User[Authenticated user] --> Editor[Editor workspace]
 
-![Nexus AI high-level design](./NexusAI_HLD.svg)
+    subgraph Browser["Browser - Next.js React client"]
+        Landing
+        Editor
+        ProjectUI[Project and collaborator UI]
+        Canvas[XYFlow collaborative canvas]
+        AISidebar[AI and specification sidebar]
+        Tour[Onboarding state]
+    end
+
+    subgraph Server["Next.js server and API routes"]
+        Proxy[Clerk route protection]
+        Pages[Editor server pages]
+        ProjectAPI[Project and collaborator APIs]
+        CanvasAPI[Canvas snapshot API]
+        LiveblocksAPI[Liveblocks auth API]
+        AIAPI[AI design and spec APIs]
+        DownloadAPI[Specification download API]
+        Access[Project access service]
+    end
+
+    subgraph Workers["Trigger.dev workers"]
+        DesignWorker[Design agent]
+        SpecWorker[Specification generator]
+    end
+
+    subgraph Persistence["Persistence"]
+        Postgres[(PostgreSQL via Prisma)]
+        Blob[(Vercel Blob)]
+        Liveblocks[(Liveblocks rooms, storage, presence and feeds)]
+    end
+
+    Clerk[Clerk identity] --> Proxy
+    Editor --> Proxy
+    Proxy --> Pages
+    ProjectUI --> ProjectAPI
+    Canvas --> Liveblocks
+    Canvas --> CanvasAPI
+    AISidebar --> AIAPI
+    AISidebar --> DownloadAPI
+    Tour --> LocalStorage[(Browser localStorage)]
+
+    Pages --> Access
+    ProjectAPI --> Access
+    CanvasAPI --> Access
+    LiveblocksAPI --> Access
+    AIAPI --> Access
+    Access --> Postgres
+    ProjectAPI --> Postgres
+    CanvasAPI --> Blob
+    CanvasAPI --> Postgres
+    LiveblocksAPI --> Liveblocks
+    AIAPI --> Trigger[Trigger.dev orchestration]
+    Trigger --> DesignWorker
+    Trigger --> SpecWorker
+    DesignWorker --> Gemini[Google Gemini]
+    DesignWorker --> Liveblocks
+    DesignWorker --> Postgres
+    SpecWorker --> Gemini
+    SpecWorker --> Blob
+    SpecWorker --> Postgres
+    DownloadAPI --> Blob
+    DownloadAPI --> Postgres
+```
 
 ### Component Diagram
 
-The component view maps the major repository modules to their interfaces and external dependencies.
+```mermaid
+flowchart LR
+    subgraph Presentation["Presentation components"]
+        Home[Editor home]
+        Shell[Workspace shell]
+        Sidebar[Project sidebar and dialogs]
+        Share[Share dialog]
+        Flow[Collaborative canvas]
+        AI[AI sidebar]
+        Onboarding[Onboarding tour]
+    end
 
-![Nexus AI component diagram](./NexusAI_Component_Diagram.svg)
+    subgraph Hooks["Client hooks"]
+        ProjectActions[useProjectActions]
+        Collaborators[useProjectCollaborators]
+        Autosave[useCanvasAutosave]
+    end
 
-### Diagram Accuracy Audit
+    subgraph Routes["App Router APIs"]
+        Projects["/api/projects"]
+        ProjectById["/api/projects/:id"]
+        CollaboratorRoute["/api/projects/:id/collaborators"]
+        CanvasRoute["/api/projects/:id/canvas"]
+        RoomAuth["/api/liveblocks-auth"]
+        DesignRoute["/api/ai/design and /token"]
+        SpecRoute["/api/ai/spec and /token"]
+        SpecDownload["/api/projects/:id/specs/:specId/download"]
+    end
 
-The remaining supplied UML files are not embedded because their detailed contracts do not match this checkout. In particular, they introduce editor/viewer roles, collaborator role updates, a separate persisted `roomId`, and task lifecycle columns that are absent from the current schema and APIs.
+    subgraph Services["Server services"]
+        AccessService[project-access]
+        ProjectQuery[editor-projects]
+        Prisma[Prisma client]
+        LiveblocksClient[Liveblocks server client]
+    end
 
-| Diagram | README status | Main reason |
-| --- | --- | --- |
-| Activity diagram | Not included | Models task status/type/error fields and role checks that are not implemented. |
-| Class diagram | Not included | Its entities and value objects differ materially from the Prisma and TypeScript models. |
-| Sequence diagram 1 | Not included | Assumes persisted room IDs and three project roles. |
-| Sequence diagram 2 | Not included | Shows a separate `roomId` and an authorization service path not used by project mutations. |
-| Sequence diagram 3 | Not included | Models read-only viewers; all authorized members currently receive room write access. |
-| Sequence diagram 4 | Not included | Models collaborator role creation and updates; collaborators are email memberships without roles. |
-| Sequence diagram 5 | Not included | Models task lifecycle fields and a request payload that differ from the design API. |
-| Sequence diagram 6 | Not included | Models task/spec fields that are absent from `TaskRun` and `ProjectSpec`. |
-| Use-case diagram | Not included | Includes editor/viewer and role-management use cases that the application does not provide. |
+    subgraph Tasks["Background tasks"]
+        DesignTask[design-agent]
+        SpecTask[generate-spec]
+    end
+
+    Home --> ProjectQuery
+    Shell --> Sidebar
+    Shell --> Flow
+    Shell --> AI
+    Shell --> Onboarding
+    Sidebar --> ProjectActions
+    Share --> Collaborators
+    Flow --> Autosave
+    ProjectActions --> Projects
+    ProjectActions --> ProjectById
+    Collaborators --> CollaboratorRoute
+    Autosave --> CanvasRoute
+    Flow --> RoomAuth
+    AI --> DesignRoute
+    AI --> SpecRoute
+    AI --> SpecDownload
+
+    Projects --> Prisma
+    ProjectById --> Prisma
+    CollaboratorRoute --> AccessService
+    CollaboratorRoute --> Prisma
+    CollaboratorRoute --> Clerk[Clerk]
+    CanvasRoute --> AccessService
+    CanvasRoute --> Prisma
+    CanvasRoute --> Blob[Vercel Blob]
+    RoomAuth --> AccessService
+    RoomAuth --> LiveblocksClient
+    DesignRoute --> AccessService
+    DesignRoute --> Trigger[Trigger.dev]
+    SpecRoute --> AccessService
+    SpecRoute --> Trigger
+    SpecDownload --> AccessService
+    SpecDownload --> Prisma
+    SpecDownload --> Blob
+    ProjectQuery --> Prisma
+    AccessService --> Prisma
+    Trigger --> DesignTask
+    Trigger --> SpecTask
+    DesignTask --> Gemini[Google Gemini]
+    DesignTask --> LiveblocksClient
+    DesignTask --> Prisma
+    SpecTask --> Gemini
+    SpecTask --> Blob
+    SpecTask --> Prisma
+```
+
+### Use-Case Diagram
+
+```mermaid
+flowchart LR
+    Guest([Guest])
+    Member([Authenticated project member])
+    Owner([Project owner])
+    Collaborator([Email-based collaborator])
+
+    subgraph Nexus["Nexus AI"]
+        Explore((Explore landing page))
+        Authenticate((Sign in or sign up))
+        Tour((Complete onboarding tour))
+        Create((Create project))
+        Browse((Browse and switch projects))
+        Rename((Rename project))
+        Delete((Delete project))
+        Invite((Invite collaborator by email))
+        Remove((Remove collaborator))
+        Canvas((Edit architecture canvas))
+        Template((Apply starter template))
+        Presence((Collaborate with presence and chat))
+        Autosave((Autosave canvas snapshot))
+        DesignAI((Generate architecture with AI))
+        SpecAI((Generate technical specification))
+        Download((Preview or download specification))
+    end
+
+    Guest --> Explore
+    Guest --> Authenticate
+    Member --> Tour
+    Member --> Browse
+    Member --> Canvas
+    Member --> Template
+    Member --> Presence
+    Member --> Autosave
+    Member --> DesignAI
+    Member --> SpecAI
+    Member --> Download
+    Owner --> Member
+    Collaborator --> Member
+    Owner --> Create
+    Owner --> Rename
+    Owner --> Delete
+    Owner --> Invite
+    Owner --> Remove
+
+    Authenticate -. uses .-> Clerk[Clerk]
+    Presence -. uses .-> Liveblocks[Liveblocks]
+    Canvas -. syncs through .-> Liveblocks
+    DesignAI -. runs through .-> Trigger[Trigger.dev]
+    SpecAI -. runs through .-> Trigger
+    DesignAI -. invokes .-> Gemini[Google Gemini]
+    SpecAI -. invokes .-> Gemini
+    Autosave -. stores in .-> Blob[Vercel Blob]
+    SpecAI -. stores in .-> Blob
+```
+
+### Class Diagram
+
+```mermaid
+classDiagram
+    class Project {
+        +String id
+        +String ownerId
+        +String name
+        +String description
+        +ProjectStatus status
+        +String canvasJsonPath
+        +String canvasBlobUrl
+        +DateTime createdAt
+        +DateTime updatedAt
+    }
+
+    class ProjectCollaborator {
+        +String id
+        +String projectId
+        +String email
+        +DateTime createdAt
+    }
+
+    class TaskRun {
+        +String id
+        +String runId
+        +String projectId
+        +String userId
+        +DateTime createdAt
+    }
+
+    class ProjectSpec {
+        +String id
+        +String projectId
+        +String filePath
+        +DateTime createdAt
+    }
+
+    class CanvasNodeData {
+        +String label
+        +CanvasNodeColorKey color
+        +CanvasNodeShape shape
+        +CanvasNodeSize size
+    }
+
+    class CanvasNode {
+        +String id
+        +Point position
+        +CanvasNodeData data
+        +String type
+    }
+
+    class CanvasEdgeData {
+        +String label
+    }
+
+    class CanvasEdge {
+        +String id
+        +String source
+        +String target
+        +CanvasEdgeData data
+        +String type
+    }
+
+    class CanvasFlow {
+        +CanvasNode[] nodes
+        +CanvasEdge[] edges
+    }
+
+    class ClerkIdentity {
+        +String userId
+        +String primaryEmail
+    }
+
+    class CollaboratorProfile {
+        +String email
+        +String displayName
+        +String avatarUrl
+    }
+
+    Project "1" *-- "0..*" ProjectCollaborator
+    Project "1" *-- "0..*" TaskRun
+    Project "1" *-- "0..*" ProjectSpec
+    CanvasFlow "1" *-- "0..*" CanvasNode
+    CanvasFlow "1" *-- "0..*" CanvasEdge
+    CanvasNode "1" *-- "1" CanvasNodeData
+    CanvasEdge "1" *-- "0..1" CanvasEdgeData
+    ClerkIdentity ..> Project : authorizes owner ID or collaborator email
+    ProjectCollaborator ..> CollaboratorProfile : enriched with Clerk profile
+```
+
+### Activity Diagram
+
+```mermaid
+flowchart TD
+    Start([Open Nexus AI]) --> Auth{Authenticated?}
+    Auth -- No --> SignIn[Sign in with Clerk]
+    SignIn --> Workspace
+    Auth -- Yes --> Workspace[Open editor or project workspace]
+    Workspace --> Access{Project access?}
+    Access -- No --> Denied[Show access denied]
+    Access -- Yes --> Load[Load project metadata, specs and canvas]
+    Load --> Action{Choose action}
+
+    Action -->|Manual edit| Edit[Edit nodes, edges or template]
+    Edit --> Sync[Liveblocks synchronizes storage and presence]
+    Sync --> Save[Debounced PUT canvas snapshot]
+    Save --> Blob[(Write canvas JSON to Vercel Blob)]
+    Blob --> ProjectRef[Update Project.canvasJsonPath]
+    ProjectRef --> Action
+
+    Action -->|AI design| Prompt[Submit architecture prompt]
+    Prompt --> DispatchDesign[Authorize and dispatch design-agent]
+    DispatchDesign --> GenerateGraph[Gemini generates validated CanvasFlow]
+    GenerateGraph --> LiveWrite[Worker replaces Liveblocks flow storage]
+    LiveWrite --> StreamDesign[Stream task and room status]
+    StreamDesign --> Action
+
+    Action -->|Generate spec| SubmitGraph[Submit chat history and canvas graph]
+    SubmitGraph --> DispatchSpec[Authorize and dispatch generate-spec]
+    DispatchSpec --> GenerateMarkdown[Gemini generates Markdown]
+    GenerateMarkdown --> StoreSpec[Store Markdown blob and ProjectSpec row]
+    StoreSpec --> Refresh[Refresh specification list]
+    Refresh --> Download[Preview or download specification]
+    Download --> Action
+
+    Action -->|Manage project| Manage{Owner operation?}
+    Manage --> RenameDelete[Rename or delete project]
+    Manage --> Membership[Invite or remove collaborator]
+    RenameDelete --> Action
+    Membership --> Action
+```
+
+### Sequence Diagram 1: Authentication and Workspace Hydration
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Proxy as Clerk proxy
+    participant Clerk
+    participant Page as Editor server page
+    participant Access as Project access service
+    participant DB as PostgreSQL
+    participant Shell as Workspace shell
+
+    User->>Browser: Open sign-in or editor
+    Browser->>Proxy: Request route
+    Proxy->>Clerk: Validate session
+    alt No valid session on protected route
+        Clerk-->>Proxy: Unauthenticated
+        Proxy-->>Browser: Redirect to sign-in
+    else Authenticated
+        Clerk-->>Proxy: User identity
+        Proxy->>Page: Continue request
+        alt Editor home
+            Page->>DB: Query owned projects and email-shared projects
+            DB-->>Page: Project lists
+        else Project workspace
+            Page->>Access: getAccessibleProject(identity, projectId)
+            Access->>DB: Match ownerId or collaborator email
+            DB-->>Access: Project or null
+            alt No project access
+                Access-->>Page: null
+                Page-->>Browser: AccessDenied
+            else Authorized member
+                Access-->>Page: Project
+                Page->>DB: Query project specifications and project lists
+                DB-->>Page: Workspace metadata
+                Page->>Shell: Render hydrated workspace
+                Shell-->>Browser: Start room, canvas and onboarding UI
+            end
+        end
+    end
+```
+
+### Sequence Diagram 2: Project Lifecycle
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant UI as Project dialogs
+    participant API as Project API routes
+    participant Clerk
+    participant DB as PostgreSQL
+
+    Owner->>UI: Create project
+    UI->>API: POST /api/projects with name
+    API->>Clerk: Read authenticated userId
+    API->>DB: Create Project(ownerId, name)
+    DB-->>API: New project with generated id
+    API-->>UI: 201 project
+    UI-->>Owner: Navigate to /editor/projectId
+
+    Owner->>UI: Rename project
+    UI->>API: PATCH /api/projects/projectId
+    API->>Clerk: Read authenticated userId
+    API->>DB: Load project ownerId
+    alt Caller is not owner
+        API-->>UI: 403 Forbidden
+    else Caller is owner
+        API->>DB: Update project name
+        DB-->>API: Updated project
+        API-->>UI: 200 project
+        UI-->>Owner: Refresh project list
+    end
+
+    Owner->>UI: Delete project
+    UI->>API: DELETE /api/projects/projectId
+    API->>DB: Verify ownerId
+    alt Caller is owner
+        API->>DB: Delete project and cascade related rows
+        API-->>UI: 204 No Content
+        UI-->>Owner: Return to editor home
+    else Caller is not owner
+        API-->>UI: 403 Forbidden
+    end
+```
+
+### Sequence Diagram 3: Collaborative Canvas and Autosave
+
+```mermaid
+sequenceDiagram
+    actor Member as Authorized member
+    participant Provider as Liveblocks room provider
+    participant AuthAPI as Liveblocks auth API
+    participant Access as Project access service
+    participant LB as Liveblocks
+    participant Canvas as XYFlow canvas
+    participant Save as Canvas API
+    participant Blob as Vercel Blob
+    participant DB as PostgreSQL
+
+    Member->>Provider: Open project workspace
+    Provider->>AuthAPI: POST room = projectId
+    AuthAPI->>Access: hasProjectAccess(identity, projectId)
+    alt Not an owner or invited email
+        Access-->>AuthAPI: false
+        AuthAPI-->>Provider: 403 Forbidden
+    else Authorized
+        Access-->>AuthAPI: true
+        AuthAPI->>LB: Ensure user has room write access
+        AuthAPI->>LB: identifyUser with name, avatar and color
+        LB-->>Provider: Signed authorization response
+        Provider->>LB: Connect and synchronize room
+        LB-->>Canvas: flow storage, presence and feeds
+    end
+
+    Canvas->>Save: GET /api/projects/projectId/canvas
+    Save->>DB: Read canvasJsonPath
+    opt Saved canvas exists
+        Save->>Blob: Read and validate CanvasFlow JSON
+        Blob-->>Save: Snapshot
+    end
+    Save-->>Canvas: CanvasFlow or null
+
+    Member->>Canvas: Edit nodes, edges or apply template
+    Canvas->>LB: Mutate shared flow storage
+    LB-->>Provider: Broadcast graph and presence changes
+    Canvas->>Canvas: Debounce changed snapshot
+    Canvas->>Save: PUT canvas = CanvasFlow
+    Save->>Access: Verify project membership
+    Save->>Blob: Overwrite projects/projectId/canvas.json
+    Blob-->>Save: Blob URL
+    Save->>DB: Update Project.canvasJsonPath
+    Save-->>Canvas: Saved
+```
+
+### Sequence Diagram 4: Collaborator Management
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    actor Collaborator
+    participant UI as Share dialog
+    participant API as Collaborator API
+    participant Clerk
+    participant DB as PostgreSQL
+    participant LB as Liveblocks
+
+    Owner->>UI: Open share dialog
+    UI->>API: GET /api/projects/projectId/collaborators
+    API->>DB: Verify owner or collaborator access
+    API->>DB: List ProjectCollaborator emails
+    API->>Clerk: Resolve optional names and avatars
+    API-->>UI: Collaborators and viewerRole
+
+    Owner->>UI: Invite email
+    UI->>API: POST email
+    API->>DB: Verify caller owns project
+    alt Caller is not owner
+        API-->>UI: 403 Forbidden
+    else Duplicate email
+        API-->>UI: 409 Conflict
+    else Valid new email
+        API->>DB: Create ProjectCollaborator
+        API->>Clerk: Try to enrich profile
+        API-->>UI: 201 collaborator profile
+        Note over Collaborator,DB: Access is matched later by the signed-in user's primary email
+    end
+
+    Owner->>UI: Remove collaborator email
+    UI->>API: DELETE email
+    API->>DB: Verify owner and delete membership
+    API->>LB: Broadcast access-revoked event
+    API-->>UI: Removed email
+    LB-->>Collaborator: Access revoked event
+```
+
+### Sequence Diagram 5: AI Architecture Generation
+
+```mermaid
+sequenceDiagram
+    actor Member
+    participant UI as AI sidebar
+    participant API as Design API
+    participant Access as Project access service
+    participant Trigger as Trigger.dev
+    participant Worker as design-agent
+    participant DB as PostgreSQL
+    participant Gemini
+    participant LB as Liveblocks
+
+    Member->>UI: Submit architecture prompt
+    UI->>LB: Append prompt to AI chat feed
+    UI->>API: POST prompt, roomId, projectId
+    API->>Access: Verify owner or collaborator membership
+    alt Invalid or unauthorized
+        API-->>UI: 400, 401, 403 or 404
+    else Authorized
+        API->>Trigger: Create project-tag token when available
+        API->>Trigger: Trigger design-agent task
+        Trigger-->>API: runId
+        API-->>UI: 202 runId and optional publicToken
+        opt Token was not returned
+            UI->>API: POST /api/ai/design/token with runId
+            API->>DB: Verify TaskRun belongs to caller
+            API->>Trigger: Mint run-scoped token
+            API-->>UI: Token
+        end
+        UI->>Trigger: Subscribe with useRealtimeRun
+        Trigger->>Worker: Run task payload
+        Worker->>LB: Set AI presence and publish start status
+        Worker->>DB: Upsert TaskRun(runId, projectId, userId)
+        Worker->>LB: Read current flow storage
+        Worker->>Gemini: Generate structured CanvasFlow
+        Gemini-->>Worker: Nodes and edges
+        Worker->>Worker: Normalize and validate graph
+        Worker->>LB: Replace shared flow storage
+        Worker->>LB: Publish completion status
+        Worker-->>Trigger: Completed result
+        Trigger-->>UI: Realtime completion
+        LB-->>UI: Updated canvas and status feed
+    end
+```
+
+### Sequence Diagram 6: Specification Generation and Download
+
+```mermaid
+sequenceDiagram
+    actor Member
+    participant UI as AI sidebar
+    participant API as Spec API
+    participant Access as Project access service
+    participant Trigger as Trigger.dev
+    participant Worker as generate-spec
+    participant Gemini
+    participant Blob as Vercel Blob
+    participant DB as PostgreSQL
+    participant Download as Download API
+
+    Member->>UI: Generate technical specification
+    UI->>API: POST roomId, chatHistory, nodes and edges
+    API->>Access: getAccessibleProject(identity, roomId)
+    alt Invalid or unauthorized
+        API-->>UI: 400, 401, 403 or 404
+    else Authorized
+        API->>Trigger: Trigger generate-spec with project tag
+        Trigger-->>API: runId
+        API->>DB: Upsert TaskRun(runId, projectId, userId)
+        API-->>UI: 202 runId
+        UI->>API: POST /api/ai/spec/token with runId
+        API->>DB: Verify run belongs to caller
+        API->>Trigger: Mint one-hour run-scoped token
+        API-->>UI: Token
+        UI->>Trigger: Subscribe with useRealtimeRun
+        Trigger->>Worker: Run validated payload
+        Worker->>Gemini: Generate Markdown from chat and canvas
+        Gemini-->>Worker: Technical specification
+        Worker->>Blob: Put projects/projectId/specs/runId.md
+        Blob-->>Worker: File URL
+        Worker->>DB: Create ProjectSpec(projectId, filePath)
+        Worker-->>Trigger: specId and filePath
+        Trigger-->>UI: Realtime completion
+        UI->>UI: Refresh server-rendered specification list
+    end
+
+    Member->>UI: Preview or download specification
+    UI->>Download: GET /api/projects/projectId/specs/specId/download
+    Download->>Access: Verify project membership
+    Download->>DB: Find ProjectSpec by projectId and specId
+    Download->>Blob: Stream Markdown by filePath
+    Blob-->>Download: Markdown stream
+    Download-->>UI: text/markdown attachment
+```
 
 ## Features
 
