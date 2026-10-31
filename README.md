@@ -12,6 +12,40 @@
 
 Users can describe an architectural system in plain English, empowering a Google Gemini-powered AI agent to autonomously map that description onto a shared React Flow canvas. Beyond visual design, a secondary background AI agent converts the finalized canvas graph into a production-grade, multi-page Markdown technical specification. This acts as a comprehensive execution guide—detailing the system blueprint, tech stack, roadmap, and task breakdowns granular enough for human engineers and AI coding assistants to execute end-to-end.
 
+## Architecture Diagrams
+
+Of the supplied UML files, these two best match Nexus AI at the system and component-boundary level. They show the implemented Next.js UI and API layers, Liveblocks collaboration, Trigger.dev workers, Gemini generation, Prisma/PostgreSQL persistence, and Vercel Blob storage.
+
+> **Implementation note:** Access control in the current code is intentionally simpler than some labels inside these architecture views: a project member is either the owner or an email-based collaborator. `Project.id` is also used as the Liveblocks room ID. The source code and Prisma schema are authoritative for those details.
+
+### High-Level Design
+
+The high-level design shows how browser features, server-side routes and services, asynchronous AI workers, persistence, and external cloud services interact.
+
+![Nexus AI high-level design](./NexusAI_HLD.svg)
+
+### Component Diagram
+
+The component view maps the major repository modules to their interfaces and external dependencies.
+
+![Nexus AI component diagram](./NexusAI_Component_Diagram.svg)
+
+### Diagram Accuracy Audit
+
+The remaining supplied UML files are not embedded because their detailed contracts do not match this checkout. In particular, they introduce editor/viewer roles, collaborator role updates, a separate persisted `roomId`, and task lifecycle columns that are absent from the current schema and APIs.
+
+| Diagram | README status | Main reason |
+| --- | --- | --- |
+| Activity diagram | Not included | Models task status/type/error fields and role checks that are not implemented. |
+| Class diagram | Not included | Its entities and value objects differ materially from the Prisma and TypeScript models. |
+| Sequence diagram 1 | Not included | Assumes persisted room IDs and three project roles. |
+| Sequence diagram 2 | Not included | Shows a separate `roomId` and an authorization service path not used by project mutations. |
+| Sequence diagram 3 | Not included | Models read-only viewers; all authorized members currently receive room write access. |
+| Sequence diagram 4 | Not included | Models collaborator role creation and updates; collaborators are email memberships without roles. |
+| Sequence diagram 5 | Not included | Models task lifecycle fields and a request payload that differ from the design API. |
+| Sequence diagram 6 | Not included | Models task/spec fields that are absent from `TaskRun` and `ProjectSpec`. |
+| Use-case diagram | Not included | Includes editor/viewer and role-management use cases that the application does not provide. |
+
 ## Features
 
 ### AI & Automation
